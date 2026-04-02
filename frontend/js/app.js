@@ -1,0 +1,2159 @@
+(function () {
+  "use strict";
+
+  var state = {
+    user: null,
+    activeSection: "overview",
+    filters: {
+      keyword: "",
+      categoryId: "",
+      type: "",
+      minAmount: "",
+      maxAmount: "",
+      fromDate: "",
+      toDate: "",
+      tag: ""
+    }
+  };
+
+  var dom = {};
+  var AUTO_CATEGORY_VALUE = "auto_detect";
+
+  var categoryKeywords = {
+    expense: {
+      Food: ["food", "restaurant", "swiggy", "zomato", "grocery", "coffee", "snack", "lunch", "dinner"],
+      Rent: ["rent", "landlord", "lease"],
+      Travel: ["uber", "ola", "metro", "bus", "train", "flight", "fuel", "petrol", "diesel"],
+      Bills: ["electricity", "wifi", "internet", "water", "bill", "phone", "gas"],
+      Shopping: ["amazon", "flipkart", "mall", "shopping", "clothes", "fashion"],
+      Health: ["medicine", "doctor", "hospital", "clinic", "pharmacy", "health"],
+      Subscriptions: ["netflix", "spotify", "subscription", "prime", "apple", "youtube"]
+    },
+    income: {
+      Salary: ["salary", "payroll", "payout", "wage"],
+      Freelance: ["freelance", "client", "project", "gig", "invoice"],
+      Investment: ["dividend", "interest", "mutual fund", "stock", "investment"]
+    }
+  };
+
+  document.addEventListener("DOMContentLoaded", init);
+
+  function init() {
+    cacheDom();
+    bindStaticEvents();
+    setDefaultDates();
+    syncViewFromSession();
+  }
+
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  function cacheDom() {
+    dom.authView = byId("authView");
+    dom.pinUnlockView = byId("pinUnlockView");
+    dom.appView = byId("appView");
+    dom.sectionNav = byId("sectionNav");
+    dom.quickAddFab = byId("quickAddFab");
+    dom.userBadge = byId("userBadge");
+    dom.themeToggle = byId("themeToggle");
+    dom.logoutBtn = byId("logoutBtn");
+    dom.lockBtn = byId("lockBtn");
+
+    dom.loginTabBtn = byId("loginTabBtn");
+    dom.signupTabBtn = byId("signupTabBtn");
+    dom.loginForm = byId("loginForm");
+    dom.signupForm = byId("signupForm");
+    dom.loginEmail = byId("loginEmail");
+    dom.loginPassword = byId("loginPassword");
+    dom.signupEmail = byId("signupEmail");
+    dom.signupPassword = byId("signupPassword");
+    dom.signupPin = byId("signupPin");
+    dom.authMessage = byId("authMessage");
+
+    dom.pinUnlockForm = byId("pinUnlockForm");
+    dom.unlockPin = byId("unlockPin");
+    dom.pinMessage = byId("pinMessage");
+
+    dom.totalBalance = byId("totalBalance");
+    dom.netWorth = byId("netWorth");
+    dom.monthlyIncome = byId("monthlyIncome");
+    dom.monthlyExpense = byId("monthlyExpense");
+    dom.todaySpend = byId("todaySpend");
+    dom.weekSpend = byId("weekSpend");
+    dom.monthSpend = byId("monthSpend");
+    dom.savingsRate = byId("savingsRate");
+
+    dom.transactionForm = byId("transactionForm");
+    dom.transactionId = byId("transactionId");
+    dom.transactionType = byId("transactionType");
+    dom.transactionAmount = byId("transactionAmount");
+    dom.transactionDate = byId("transactionDate");
+    dom.transactionCategory = byId("transactionCategory");
+    dom.transactionTags = byId("transactionTags");
+    dom.transactionAccount = byId("transactionAccount");
+    dom.transactionNotes = byId("transactionNotes");
+    dom.isRecurringTransaction = byId("isRecurringTransaction");
+    dom.recurringFrequency = byId("recurringFrequency");
+    dom.cancelEditBtn = byId("cancelEditBtn");
+    dom.editIndicator = byId("editIndicator");
+
+    dom.filtersForm = byId("filtersForm");
+    dom.filterKeyword = byId("filterKeyword");
+    dom.filterCategory = byId("filterCategory");
+    dom.filterType = byId("filterType");
+    dom.filterMinAmount = byId("filterMinAmount");
+    dom.filterMaxAmount = byId("filterMaxAmount");
+    dom.filterFromDate = byId("filterFromDate");
+    dom.filterToDate = byId("filterToDate");
+    dom.filterTag = byId("filterTag");
+    dom.clearFiltersBtn = byId("clearFiltersBtn");
+
+    dom.transactionsBody = byId("transactionsBody");
+    dom.transactionCount = byId("transactionCount");
+    dom.openTransactionsModalBtn = byId("openTransactionsModalBtn");
+    dom.allTransactionsModal = byId("allTransactionsModal");
+    dom.transactionsModalCount = byId("transactionsModalCount");
+    dom.transactionRecordModal = byId("transactionRecordModal");
+    dom.transactionRecordMeta = byId("transactionRecordMeta");
+    dom.transactionRecordBody = byId("transactionRecordBody");
+    dom.transactionRecordEditBtn = byId("transactionRecordEditBtn");
+    dom.transactionRecordDeleteBtn = byId("transactionRecordDeleteBtn");
+
+    dom.categoryForm = byId("categoryForm");
+    dom.newCategoryName = byId("newCategoryName");
+    dom.newCategoryType = byId("newCategoryType");
+    dom.categoriesList = byId("categoriesList");
+
+    dom.accountForm = byId("accountForm");
+    dom.newAccountName = byId("newAccountName");
+    dom.newAccountType = byId("newAccountType");
+    dom.newAccountInitialBalance = byId("newAccountInitialBalance");
+    dom.accountsList = byId("accountsList");
+    dom.defaultCurrency = byId("defaultCurrency");
+
+    dom.budgetForm = byId("budgetForm");
+    dom.budgetCategory = byId("budgetCategory");
+    dom.budgetLimit = byId("budgetLimit");
+    dom.budgetsList = byId("budgetsList");
+
+    dom.goalForm = byId("goalForm");
+    dom.goalName = byId("goalName");
+    dom.goalTarget = byId("goalTarget");
+    dom.goalDeadline = byId("goalDeadline");
+    dom.goalsList = byId("goalsList");
+
+    dom.reminderForm = byId("reminderForm");
+    dom.reminderTitle = byId("reminderTitle");
+    dom.reminderAmount = byId("reminderAmount");
+    dom.reminderDate = byId("reminderDate");
+    dom.reminderFrequency = byId("reminderFrequency");
+    dom.remindersList = byId("remindersList");
+
+    dom.recurringList = byId("recurringList");
+    dom.insightsList = byId("insightsList");
+
+    dom.exportCsvBtn = byId("exportCsvBtn");
+    dom.exportPdfBtn = byId("exportPdfBtn");
+    dom.backupBtn = byId("backupBtn");
+    dom.restoreInput = byId("restoreInput");
+    dom.exportMessage = byId("exportMessage");
+
+    dom.sectionButtons = Array.prototype.slice.call(document.querySelectorAll(".section-nav-btn"));
+    dom.appSections = Array.prototype.slice.call(document.querySelectorAll("[data-app-section]"));
+  }
+
+  function bindStaticEvents() {
+    dom.loginTabBtn.addEventListener("click", function () {
+      switchAuthTab("login");
+    });
+    dom.signupTabBtn.addEventListener("click", function () {
+      switchAuthTab("signup");
+    });
+    dom.loginForm.addEventListener("submit", handleLogin);
+    dom.signupForm.addEventListener("submit", handleSignup);
+    dom.pinUnlockForm.addEventListener("submit", handlePinUnlock);
+
+    dom.themeToggle.addEventListener("click", toggleTheme);
+    dom.logoutBtn.addEventListener("click", handleLogout);
+    dom.lockBtn.addEventListener("click", handleLock);
+    if (dom.sectionNav) {
+      dom.sectionNav.addEventListener("click", handleSectionNavClick);
+    }
+    dom.quickAddFab.addEventListener("click", function () {
+      setActiveSection("transactions");
+      var panel = byId("quickAddPanel");
+      if (panel) {
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      dom.transactionAmount.focus();
+    });
+
+    dom.transactionType.addEventListener("change", function () {
+      populateTransactionCategorySelect(dom.transactionType.value, "");
+    });
+    dom.transactionForm.addEventListener("submit", handleTransactionSubmit);
+    dom.cancelEditBtn.addEventListener("click", resetTransactionForm);
+
+    dom.filtersForm.addEventListener("submit", handleFiltersSubmit);
+    dom.clearFiltersBtn.addEventListener("click", clearFilters);
+
+    dom.categoryForm.addEventListener("submit", handleAddCategory);
+    dom.accountForm.addEventListener("submit", handleAddAccount);
+    dom.defaultCurrency.addEventListener("change", handleCurrencyChange);
+
+    dom.budgetForm.addEventListener("submit", handleBudgetSubmit);
+    dom.goalForm.addEventListener("submit", handleGoalSubmit);
+    dom.reminderForm.addEventListener("submit", handleReminderSubmit);
+
+    if (dom.transactionsBody) {
+      dom.transactionsBody.addEventListener("click", handleTransactionsTableClick);
+    }
+    if (dom.openTransactionsModalBtn) {
+      dom.openTransactionsModalBtn.addEventListener("click", openAllTransactionsModal);
+    }
+    if (dom.allTransactionsModal) {
+      dom.allTransactionsModal.addEventListener("click", handleAllTransactionsModalClick);
+    }
+    if (dom.transactionRecordModal) {
+      dom.transactionRecordModal.addEventListener("click", handleTransactionRecordModalClick);
+    }
+    dom.categoriesList.addEventListener("click", handleCategoriesListClick);
+    dom.accountsList.addEventListener("click", handleAccountsListClick);
+    dom.budgetsList.addEventListener("click", handleBudgetsListClick);
+    dom.goalsList.addEventListener("click", handleGoalsListClick);
+    dom.remindersList.addEventListener("click", handleRemindersListClick);
+    dom.recurringList.addEventListener("click", handleRecurringListClick);
+
+    dom.exportCsvBtn.addEventListener("click", exportTransactionsCsv);
+    dom.exportPdfBtn.addEventListener("click", exportSummaryPdf);
+    dom.backupBtn.addEventListener("click", backupUserData);
+    dom.restoreInput.addEventListener("change", restoreUserDataFromFile);
+    document.addEventListener("keydown", handleGlobalKeyDown);
+  }
+
+  function setDefaultDates() {
+    var today = toDateInputValue(new Date());
+    dom.transactionDate.value = today;
+    dom.reminderDate.value = today;
+  }
+
+  function switchAuthTab(tabName) {
+    var showLogin = tabName === "login";
+    dom.loginForm.classList.toggle("hidden", !showLogin);
+    dom.signupForm.classList.toggle("hidden", showLogin);
+    dom.loginTabBtn.classList.toggle("active", showLogin);
+    dom.signupTabBtn.classList.toggle("active", !showLogin);
+    setAuthMessage("");
+  }
+
+  function handleLogin(event) {
+    event.preventDefault();
+    try {
+      window.AuthService.login({
+        email: dom.loginEmail.value,
+        password: dom.loginPassword.value
+      });
+      dom.loginForm.reset();
+      setAuthMessage("Login successful.", false);
+      syncViewFromSession();
+    } catch (error) {
+      setAuthMessage(error.message, true);
+    }
+  }
+
+  function handleSignup(event) {
+    event.preventDefault();
+    try {
+      window.AuthService.signup({
+        email: dom.signupEmail.value,
+        password: dom.signupPassword.value,
+        pin: dom.signupPin.value
+      });
+      dom.signupForm.reset();
+      setAuthMessage("Account created. You are now logged in.", false);
+      syncViewFromSession();
+    } catch (error) {
+      setAuthMessage(error.message, true);
+    }
+  }
+
+  function handlePinUnlock(event) {
+    event.preventDefault();
+    try {
+      window.AuthService.unlockSession(dom.unlockPin.value);
+      dom.pinUnlockForm.reset();
+      dom.pinMessage.textContent = "";
+      activateApp();
+    } catch (error) {
+      dom.pinMessage.textContent = error.message;
+      dom.pinMessage.style.color = "var(--danger)";
+    }
+  }
+
+  function handleLogout() {
+    window.AuthService.logout();
+    state.user = null;
+    syncViewFromSession();
+  }
+
+  function handleLock() {
+    try {
+      window.AuthService.lockSession();
+      showView("pin");
+    } catch (error) {
+      setAppMessage(error.message, true);
+    }
+  }
+
+  function syncViewFromSession() {
+    state.user = window.AuthService.getCurrentUser();
+    if (!state.user) {
+      showView("auth");
+      switchAuthTab("login");
+      return;
+    }
+    applyTheme((state.user.settings && state.user.settings.theme) || "light", false);
+    if (window.AuthService.isLocked()) {
+      showView("pin");
+      return;
+    }
+    activateApp();
+  }
+
+  function activateApp() {
+    state.user = window.AuthService.getCurrentUser();
+    if (!state.user) {
+      showView("auth");
+      return;
+    }
+    processDueRecurringTransactions();
+    state.user = window.AuthService.getCurrentUser();
+    showView("app");
+    populateDropdowns();
+    setActiveSection(state.activeSection || "overview");
+    renderAll();
+  }
+
+  function handleSectionNavClick(event) {
+    var button = event.target.closest("button[data-section]");
+    if (!button) {
+      return;
+    }
+    var sectionName = button.getAttribute("data-section");
+    if (!sectionName) {
+      return;
+    }
+    setActiveSection(sectionName);
+  }
+
+  function setActiveSection(sectionName) {
+    var availableSections = (dom.appSections || []).map(function (section) {
+      return section.getAttribute("data-app-section");
+    });
+    if (!availableSections.length) {
+      return;
+    }
+
+    var targetSection = availableSections.indexOf(sectionName) === -1 ? "overview" : sectionName;
+    state.activeSection = targetSection;
+    if (targetSection !== "transactions") {
+      closeAllTransactionsModal();
+      closeTransactionRecord();
+    }
+
+    (dom.appSections || []).forEach(function (section) {
+      var isActive = section.getAttribute("data-app-section") === targetSection;
+      section.classList.toggle("section-hidden", !isActive);
+    });
+
+    (dom.sectionButtons || []).forEach(function (button) {
+      var isActive = button.getAttribute("data-section") === targetSection;
+      button.classList.toggle("active", isActive);
+      if (isActive) {
+        button.setAttribute("aria-current", "page");
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    });
+
+    updateQuickAddVisibility();
+
+    if (targetSection === "analytics" && state.user) {
+      renderCharts();
+    }
+  }
+
+  function updateQuickAddVisibility() {
+    var isAppVisible = dom.appView && !dom.appView.classList.contains("hidden");
+    var shouldShow = isAppVisible && state.activeSection === "transactions";
+    dom.quickAddFab.classList.toggle("hidden", !shouldShow);
+  }
+
+  function showView(view) {
+    var isAuth = view === "auth";
+    var isPin = view === "pin";
+    var isApp = view === "app";
+    if (!isApp) {
+      closeAllTransactionsModal();
+      closeTransactionRecord();
+    }
+    dom.authView.classList.toggle("hidden", !isAuth);
+    dom.pinUnlockView.classList.toggle("hidden", !isPin);
+    dom.appView.classList.toggle("hidden", !isApp);
+    if (dom.sectionNav) {
+      dom.sectionNav.classList.toggle("hidden", !isApp);
+    }
+    dom.logoutBtn.classList.toggle("hidden", !isApp);
+    dom.userBadge.classList.toggle("hidden", !isApp);
+    dom.lockBtn.classList.toggle("hidden", !isApp || !hasPinConfigured());
+    updateQuickAddVisibility();
+  }
+
+  function hasPinConfigured() {
+    return Boolean(state.user && state.user.settings && state.user.settings.pinHash);
+  }
+
+  function renderAll() {
+    if (!state.user) {
+      return;
+    }
+    state.user = window.AuthService.getCurrentUser();
+    populateDropdowns();
+    renderUserHeader();
+    renderStats();
+    renderTransactionsTable();
+    renderCategories();
+    renderAccounts();
+    renderBudgets();
+    renderGoals();
+    renderReminders();
+    renderRecurringRules();
+    renderInsights();
+    renderCharts();
+  }
+
+  function renderUserHeader() {
+    dom.userBadge.textContent = state.user.email;
+    dom.defaultCurrency.value = state.user.settings && state.user.settings.currency ? state.user.settings.currency : "INR";
+    dom.lockBtn.classList.toggle("hidden", !hasPinConfigured());
+  }
+
+  function handleTransactionSubmit(event) {
+    event.preventDefault();
+    if (!state.user) {
+      return;
+    }
+
+    var transactionId = dom.transactionId.value;
+    var type = dom.transactionType.value;
+    var amount = toAmount(dom.transactionAmount.value);
+    var date = dom.transactionDate.value || toDateInputValue(new Date());
+    var selectedCategory = dom.transactionCategory.value;
+    var notes = String(dom.transactionNotes.value || "").trim();
+    var tags = parseTags(dom.transactionTags.value);
+    var accountId = dom.transactionAccount.value || getDefaultAccountId();
+
+    if (amount <= 0) {
+      setAppMessage("Amount must be greater than 0.", true);
+      return;
+    }
+
+    var categoryId = selectedCategory;
+    if (!selectedCategory || selectedCategory === AUTO_CATEGORY_VALUE) {
+      categoryId = inferCategoryId(type, notes);
+    }
+
+    var recurringEnabled = dom.isRecurringTransaction.checked;
+    var recurringFrequency = dom.recurringFrequency.value;
+
+    updateUser(function (user) {
+      if (transactionId) {
+        var existing = user.transactions.find(function (item) {
+          return item.id === transactionId;
+        });
+        if (!existing) {
+          throw new Error("Transaction not found.");
+        }
+        existing.type = type;
+        existing.amount = amount;
+        existing.date = date;
+        existing.categoryId = categoryId;
+        existing.notes = notes;
+        existing.tags = tags;
+        existing.accountId = accountId;
+        existing.updatedAt = new Date().toISOString();
+      } else {
+        user.transactions.push({
+          id: window.FinanceStorage.createId("txn"),
+          type: type,
+          amount: amount,
+          date: date,
+          categoryId: categoryId,
+          notes: notes,
+          tags: tags,
+          accountId: accountId,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      if (recurringEnabled && !transactionId) {
+        user.recurringRules.push({
+          id: window.FinanceStorage.createId("rec"),
+          active: true,
+          frequency: recurringFrequency,
+          nextDate: shiftDate(date, recurringFrequency),
+          startDate: date,
+          title: notes || getCategoryName(categoryId),
+          type: type,
+          amount: amount,
+          categoryId: categoryId,
+          notes: notes,
+          tags: tags,
+          accountId: accountId,
+          createdAt: new Date().toISOString()
+        });
+      }
+      return user;
+    });
+
+    resetTransactionForm();
+    setAppMessage("Transaction saved.", false);
+    renderAll();
+  }
+
+  function resetTransactionForm() {
+    dom.transactionForm.reset();
+    dom.transactionId.value = "";
+    dom.transactionDate.value = toDateInputValue(new Date());
+    dom.transactionType.value = "expense";
+    populateTransactionCategorySelect("expense", AUTO_CATEGORY_VALUE);
+    dom.transactionAccount.value = getDefaultAccountId();
+    dom.cancelEditBtn.classList.add("hidden");
+    dom.editIndicator.classList.add("hidden");
+  }
+
+  function handleTransactionsTableClick(event) {
+    var button = event.target.closest("button[data-action]");
+    if (!button) {
+      return;
+    }
+    var action = button.getAttribute("data-action");
+    var transactionId = button.getAttribute("data-id");
+    if (!transactionId) {
+      return;
+    }
+
+    if (action === "edit-transaction") {
+      closeAllTransactionsModal();
+      openTransactionEditor(transactionId);
+      return;
+    }
+    if (action === "view-transaction") {
+      closeAllTransactionsModal();
+      openTransactionRecord(transactionId);
+      return;
+    }
+    if (action === "delete-transaction") {
+      deleteTransaction(transactionId);
+    }
+  }
+
+  function handleAllTransactionsModalClick(event) {
+    var actionButton = event.target.closest("[data-action]");
+    if (!actionButton || !dom.allTransactionsModal || !dom.allTransactionsModal.contains(actionButton)) {
+      return;
+    }
+    var action = actionButton.getAttribute("data-action");
+    if (action === "close-all-transactions-modal") {
+      closeAllTransactionsModal();
+    }
+  }
+
+  function openAllTransactionsModal() {
+    if (!dom.allTransactionsModal) {
+      return;
+    }
+    renderTransactionsTable();
+    dom.allTransactionsModal.classList.remove("hidden");
+    dom.allTransactionsModal.setAttribute("aria-hidden", "false");
+    syncBodyModalState();
+  }
+
+  function closeAllTransactionsModal() {
+    if (!dom.allTransactionsModal) {
+      return;
+    }
+    dom.allTransactionsModal.classList.add("hidden");
+    dom.allTransactionsModal.setAttribute("aria-hidden", "true");
+    syncBodyModalState();
+  }
+
+  function syncBodyModalState() {
+    var hasAllTransactionsModal = dom.allTransactionsModal && !dom.allTransactionsModal.classList.contains("hidden");
+    var hasRecordModal = dom.transactionRecordModal && !dom.transactionRecordModal.classList.contains("hidden");
+    document.body.classList.toggle("modal-open", Boolean(hasAllTransactionsModal || hasRecordModal));
+  }
+
+  function handleTransactionRecordModalClick(event) {
+    var actionButton = event.target.closest("[data-action]");
+    if (!actionButton || !dom.transactionRecordModal || !dom.transactionRecordModal.contains(actionButton)) {
+      return;
+    }
+    var action = actionButton.getAttribute("data-action");
+    var transactionId = dom.transactionRecordModal.getAttribute("data-id");
+
+    if (action === "close-transaction-record") {
+      closeTransactionRecord();
+      return;
+    }
+    if (!transactionId) {
+      return;
+    }
+    if (action === "record-edit-transaction") {
+      closeTransactionRecord();
+      openTransactionEditor(transactionId);
+      return;
+    }
+    if (action === "record-delete-transaction") {
+      closeTransactionRecord();
+      deleteTransaction(transactionId);
+    }
+  }
+
+  function handleGlobalKeyDown(event) {
+    if (event.key !== "Escape") {
+      return;
+    }
+    if (dom.transactionRecordModal && !dom.transactionRecordModal.classList.contains("hidden")) {
+      closeTransactionRecord();
+      return;
+    }
+    if (dom.allTransactionsModal && !dom.allTransactionsModal.classList.contains("hidden")) {
+      closeAllTransactionsModal();
+    }
+  }
+
+  function openTransactionRecord(transactionId) {
+    if (!dom.transactionRecordModal || !dom.transactionRecordBody) {
+      return;
+    }
+    var transaction = (state.user.transactions || []).find(function (item) {
+      return item.id === transactionId;
+    });
+    if (!transaction) {
+      return;
+    }
+
+    var typeLabel = capitalize(transaction.type);
+    var typeClass = transaction.type === "income" ? "income" : "expense";
+    var tags = transaction.tags || [];
+    var tagsMarkup = tags.length
+      ? "<div class='record-tags'>" + tags.map(function (tag) {
+        return "<span class='record-tag'>" + escapeHtml(tag) + "</span>";
+      }).join("") + "</div>"
+      : "<span class='record-empty'>No tags</span>";
+    var notesText = String(transaction.notes || "").trim();
+    var notesMarkup = notesText ? escapeHtml(notesText).replace(/\n/g, "<br>") : "<span class='record-empty'>No notes added</span>";
+    var createdMarkup = transaction.createdAt
+      ? escapeHtml(formatDateTime(transaction.createdAt))
+      : "<span class='record-empty'>Not available</span>";
+    var updatedMarkup = transaction.updatedAt
+      ? escapeHtml(formatDateTime(transaction.updatedAt))
+      : "<span class='record-empty'>Not edited yet</span>";
+
+    dom.transactionRecordBody.innerHTML = [
+      "<div class='record-hero record-field full'>",
+      "<div>",
+      "<span class='record-field-label'>Amount</span>",
+      "<div class='record-amount mono ", typeClass, "'>", escapeHtml(formatMoney(transaction.amount)), "</div>",
+      "</div>",
+      "<span class='record-type-pill ", typeClass, "'>", escapeHtml(typeLabel), "</span>",
+      "</div>",
+      buildTransactionRecordField("Date", escapeHtml(formatDate(transaction.date))),
+      buildTransactionRecordField("Category", escapeHtml(getCategoryName(transaction.categoryId))),
+      buildTransactionRecordField("Account", escapeHtml(getAccountName(transaction.accountId))),
+      buildTransactionRecordField("Tags", tagsMarkup),
+      buildTransactionRecordField("Created", createdMarkup),
+      buildTransactionRecordField("Last Updated", updatedMarkup),
+      buildTransactionRecordField("Notes", notesMarkup, true)
+    ].join("");
+
+    dom.transactionRecordMeta.textContent = "ID: " + transaction.id;
+    dom.transactionRecordModal.setAttribute("data-id", transaction.id);
+    dom.transactionRecordModal.classList.remove("hidden");
+    dom.transactionRecordModal.setAttribute("aria-hidden", "false");
+    syncBodyModalState();
+    if (dom.transactionRecordEditBtn) {
+      dom.transactionRecordEditBtn.focus();
+    }
+  }
+
+  function buildTransactionRecordField(label, valueMarkup, fullWidth) {
+    return [
+      "<div class='record-field", fullWidth ? " full" : "", "'>",
+      "<span class='record-field-label'>", escapeHtml(label), "</span>",
+      "<div class='record-field-value'>", valueMarkup, "</div>",
+      "</div>"
+    ].join("");
+  }
+
+  function closeTransactionRecord() {
+    if (!dom.transactionRecordModal) {
+      return;
+    }
+    dom.transactionRecordModal.classList.add("hidden");
+    dom.transactionRecordModal.setAttribute("aria-hidden", "true");
+    dom.transactionRecordModal.removeAttribute("data-id");
+    if (dom.transactionRecordMeta) {
+      dom.transactionRecordMeta.textContent = "ID: -";
+    }
+    if (dom.transactionRecordBody) {
+      dom.transactionRecordBody.innerHTML = "";
+    }
+    syncBodyModalState();
+  }
+
+  function openTransactionEditor(transactionId) {
+    var transaction = (state.user.transactions || []).find(function (item) {
+      return item.id === transactionId;
+    });
+    if (!transaction) {
+      return;
+    }
+
+    dom.transactionId.value = transaction.id;
+    dom.transactionType.value = transaction.type;
+    populateTransactionCategorySelect(transaction.type, transaction.categoryId);
+    dom.transactionAmount.value = transaction.amount;
+    dom.transactionDate.value = transaction.date;
+    dom.transactionTags.value = (transaction.tags || []).join(", ");
+    dom.transactionNotes.value = transaction.notes || "";
+    dom.transactionAccount.value = transaction.accountId || getDefaultAccountId();
+    dom.isRecurringTransaction.checked = false;
+    dom.cancelEditBtn.classList.remove("hidden");
+    dom.editIndicator.classList.remove("hidden");
+    setActiveSection("transactions");
+    byId("quickAddPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function deleteTransaction(transactionId) {
+    if (dom.transactionRecordModal && dom.transactionRecordModal.getAttribute("data-id") === transactionId) {
+      closeTransactionRecord();
+    }
+    updateUser(function (user) {
+      user.transactions = window.FinanceStorage.removeItemById(user.transactions, transactionId);
+      return user;
+    });
+    setAppMessage("Transaction deleted.", false);
+    renderAll();
+  }
+
+  function handleFiltersSubmit(event) {
+    event.preventDefault();
+    state.filters = {
+      keyword: String(dom.filterKeyword.value || "").trim().toLowerCase(),
+      categoryId: dom.filterCategory.value,
+      type: dom.filterType.value,
+      minAmount: dom.filterMinAmount.value,
+      maxAmount: dom.filterMaxAmount.value,
+      fromDate: dom.filterFromDate.value,
+      toDate: dom.filterToDate.value,
+      tag: String(dom.filterTag.value || "").trim().toLowerCase()
+    };
+    renderTransactionsTable();
+    renderCharts();
+  }
+
+  function clearFilters() {
+    dom.filtersForm.reset();
+    state.filters = {
+      keyword: "",
+      categoryId: "",
+      type: "",
+      minAmount: "",
+      maxAmount: "",
+      fromDate: "",
+      toDate: "",
+      tag: ""
+    };
+    renderTransactionsTable();
+    renderCharts();
+  }
+
+  function handleAddCategory(event) {
+    event.preventDefault();
+    var name = String(dom.newCategoryName.value || "").trim();
+    var type = dom.newCategoryType.value;
+    if (!name) {
+      return;
+    }
+    try {
+      updateUser(function (user) {
+        var exists = user.categories.some(function (category) {
+          return category.type === type && category.name.toLowerCase() === name.toLowerCase();
+        });
+        if (exists) {
+          throw new Error("Category already exists.");
+        }
+        user.categories.push({
+          id: window.FinanceStorage.createId("cat"),
+          name: name,
+          type: type,
+          system: false
+        });
+        return user;
+      });
+      dom.categoryForm.reset();
+      setAppMessage("Category added.", false);
+      renderAll();
+    } catch (error) {
+      setAppMessage(error.message, true);
+    }
+  }
+
+  function handleCategoriesListClick(event) {
+    var button = event.target.closest("button[data-action]");
+    if (!button || button.getAttribute("data-action") !== "remove-category") {
+      return;
+    }
+    var categoryId = button.getAttribute("data-id");
+    if (!categoryId) {
+      return;
+    }
+    try {
+      updateUser(function (user) {
+        var target = user.categories.find(function (category) {
+          return category.id === categoryId;
+        });
+        if (!target) {
+          return user;
+        }
+        if (target.system) {
+          throw new Error("Default categories cannot be removed.");
+        }
+        var inUse = user.transactions.some(function (tx) {
+          return tx.categoryId === categoryId;
+        }) || user.budgets.some(function (budget) {
+          return budget.categoryId === categoryId;
+        }) || user.recurringRules.some(function (rule) {
+          return rule.categoryId === categoryId;
+        });
+        if (inUse) {
+          throw new Error("Category is currently in use.");
+        }
+        user.categories = window.FinanceStorage.removeItemById(user.categories, categoryId);
+        return user;
+      });
+      setAppMessage("Category removed.", false);
+      renderAll();
+    } catch (error) {
+      setAppMessage(error.message, true);
+    }
+  }
+
+  function handleAddAccount(event) {
+    event.preventDefault();
+    var name = String(dom.newAccountName.value || "").trim();
+    var type = dom.newAccountType.value;
+    var initialBalance = toAmount(dom.newAccountInitialBalance.value || "0");
+    if (!name) {
+      return;
+    }
+    try {
+      updateUser(function (user) {
+        var exists = user.accounts.some(function (account) {
+          return account.name.toLowerCase() === name.toLowerCase();
+        });
+        if (exists) {
+          throw new Error("Account already exists.");
+        }
+        user.accounts.push({
+          id: window.FinanceStorage.createId("acct"),
+          name: name,
+          type: type,
+          initialBalance: initialBalance
+        });
+        return user;
+      });
+      dom.accountForm.reset();
+      setAppMessage("Account added.", false);
+      renderAll();
+    } catch (error) {
+      setAppMessage(error.message, true);
+    }
+  }
+
+  function handleAccountsListClick(event) {
+    var button = event.target.closest("button[data-action]");
+    if (!button || button.getAttribute("data-action") !== "remove-account") {
+      return;
+    }
+    var accountId = button.getAttribute("data-id");
+    if (!accountId) {
+      return;
+    }
+
+    try {
+      updateUser(function (user) {
+        if (user.accounts.length <= 1) {
+          throw new Error("At least one account is required.");
+        }
+        var inUse = user.transactions.some(function (transaction) {
+          return transaction.accountId === accountId;
+        }) || user.recurringRules.some(function (rule) {
+          return rule.accountId === accountId;
+        });
+        if (inUse) {
+          throw new Error("Account is linked to transactions.");
+        }
+        user.accounts = window.FinanceStorage.removeItemById(user.accounts, accountId);
+        return user;
+      });
+      setAppMessage("Account removed.", false);
+      renderAll();
+    } catch (error) {
+      setAppMessage(error.message, true);
+    }
+  }
+
+  function handleCurrencyChange() {
+    var currency = dom.defaultCurrency.value || "INR";
+    updateUser(function (user) {
+      user.settings = user.settings || {};
+      user.settings.currency = currency;
+      return user;
+    });
+    renderAll();
+  }
+
+  function handleBudgetSubmit(event) {
+    event.preventDefault();
+    var categoryId = dom.budgetCategory.value;
+    var limit = toAmount(dom.budgetLimit.value);
+    var month = getCurrentMonthKey();
+    if (!categoryId || limit <= 0) {
+      setAppMessage("Select a category and budget above 0.", true);
+      return;
+    }
+    updateUser(function (user) {
+      var existing = user.budgets.find(function (budget) {
+        return budget.categoryId === categoryId && budget.month === month;
+      });
+      if (existing) {
+        existing.limit = limit;
+        existing.updatedAt = new Date().toISOString();
+      } else {
+        user.budgets.push({
+          id: window.FinanceStorage.createId("bdg"),
+          categoryId: categoryId,
+          month: month,
+          limit: limit,
+          createdAt: new Date().toISOString()
+        });
+      }
+      return user;
+    });
+    dom.budgetForm.reset();
+    setAppMessage("Budget saved for " + month + ".", false);
+    renderAll();
+  }
+
+  function handleBudgetsListClick(event) {
+    var button = event.target.closest("button[data-action]");
+    if (!button || button.getAttribute("data-action") !== "remove-budget") {
+      return;
+    }
+    var budgetId = button.getAttribute("data-id");
+    if (!budgetId) {
+      return;
+    }
+    updateUser(function (user) {
+      user.budgets = window.FinanceStorage.removeItemById(user.budgets, budgetId);
+      return user;
+    });
+    setAppMessage("Budget removed.", false);
+    renderAll();
+  }
+
+  function handleGoalSubmit(event) {
+    event.preventDefault();
+    var name = String(dom.goalName.value || "").trim();
+    var target = toAmount(dom.goalTarget.value);
+    var deadline = dom.goalDeadline.value || "";
+    if (!name || target <= 0) {
+      setAppMessage("Goal name and positive target are required.", true);
+      return;
+    }
+    updateUser(function (user) {
+      user.goals.push({
+        id: window.FinanceStorage.createId("goal"),
+        name: name,
+        target: target,
+        saved: 0,
+        deadline: deadline,
+        createdAt: new Date().toISOString()
+      });
+      return user;
+    });
+    dom.goalForm.reset();
+    setAppMessage("Goal added.", false);
+    renderAll();
+  }
+
+  function handleGoalsListClick(event) {
+    var button = event.target.closest("button[data-action]");
+    if (!button) {
+      return;
+    }
+    var action = button.getAttribute("data-action");
+    var goalId = button.getAttribute("data-id");
+    if (!goalId) {
+      return;
+    }
+
+    if (action === "remove-goal") {
+      updateUser(function (user) {
+        user.goals = window.FinanceStorage.removeItemById(user.goals, goalId);
+        return user;
+      });
+      setAppMessage("Goal removed.", false);
+      renderAll();
+      return;
+    }
+
+    if (action === "add-goal-funds") {
+      var rawAmount = window.prompt("How much do you want to add to this goal?", "1000");
+      if (rawAmount == null) {
+        return;
+      }
+      var amount = toAmount(rawAmount);
+      if (amount <= 0) {
+        setAppMessage("Contribution amount must be above 0.", true);
+        return;
+      }
+      updateUser(function (user) {
+        var goal = user.goals.find(function (item) {
+          return item.id === goalId;
+        });
+        if (!goal) {
+          return user;
+        }
+        goal.saved = toAmount(goal.saved) + amount;
+        goal.updatedAt = new Date().toISOString();
+        return user;
+      });
+      setAppMessage("Goal updated.", false);
+      renderAll();
+    }
+  }
+
+  function handleReminderSubmit(event) {
+    event.preventDefault();
+    var title = String(dom.reminderTitle.value || "").trim();
+    var amount = toAmount(dom.reminderAmount.value || "0");
+    var dueDate = dom.reminderDate.value;
+    var frequency = dom.reminderFrequency.value;
+    if (!title || !dueDate) {
+      setAppMessage("Reminder title and date are required.", true);
+      return;
+    }
+    updateUser(function (user) {
+      user.reminders.push({
+        id: window.FinanceStorage.createId("rem"),
+        title: title,
+        amount: amount,
+        dueDate: dueDate,
+        frequency: frequency,
+        createdAt: new Date().toISOString()
+      });
+      return user;
+    });
+    dom.reminderForm.reset();
+    dom.reminderDate.value = toDateInputValue(new Date());
+    setAppMessage("Reminder added.", false);
+    renderAll();
+  }
+
+  function handleRemindersListClick(event) {
+    var button = event.target.closest("button[data-action]");
+    if (!button) {
+      return;
+    }
+    var action = button.getAttribute("data-action");
+    var reminderId = button.getAttribute("data-id");
+    if (!reminderId) {
+      return;
+    }
+
+    if (action === "remove-reminder") {
+      updateUser(function (user) {
+        user.reminders = window.FinanceStorage.removeItemById(user.reminders, reminderId);
+        return user;
+      });
+      setAppMessage("Reminder removed.", false);
+      renderAll();
+      return;
+    }
+
+    if (action === "mark-reminder-paid") {
+      updateUser(function (user) {
+        var reminder = user.reminders.find(function (item) {
+          return item.id === reminderId;
+        });
+        if (!reminder) {
+          return user;
+        }
+        if (reminder.frequency === "monthly") {
+          reminder.dueDate = shiftDate(reminder.dueDate, "monthly");
+          reminder.updatedAt = new Date().toISOString();
+        } else {
+          user.reminders = window.FinanceStorage.removeItemById(user.reminders, reminderId);
+        }
+        return user;
+      });
+      setAppMessage("Reminder updated.", false);
+      renderAll();
+    }
+  }
+
+  function handleRecurringListClick(event) {
+    var button = event.target.closest("button[data-action]");
+    if (!button) {
+      return;
+    }
+    var action = button.getAttribute("data-action");
+    var ruleId = button.getAttribute("data-id");
+    if (!ruleId) {
+      return;
+    }
+    if (action === "toggle-recurring") {
+      updateUser(function (user) {
+        var rule = user.recurringRules.find(function (item) {
+          return item.id === ruleId;
+        });
+        if (rule) {
+          rule.active = !rule.active;
+          rule.updatedAt = new Date().toISOString();
+        }
+        return user;
+      });
+      renderAll();
+      return;
+    }
+    if (action === "remove-recurring") {
+      updateUser(function (user) {
+        user.recurringRules = window.FinanceStorage.removeItemById(user.recurringRules, ruleId);
+        return user;
+      });
+      renderAll();
+    }
+  }
+
+  function processDueRecurringTransactions() {
+    if (!state.user || !Array.isArray(state.user.recurringRules)) {
+      return;
+    }
+    var today = toDateInputValue(new Date());
+    var changed = false;
+
+    var nextUser = updateUser(function (user) {
+      var transactions = Array.isArray(user.transactions) ? user.transactions : [];
+      user.recurringRules.forEach(function (rule) {
+        if (!rule.active || !rule.nextDate) {
+          return;
+        }
+        var safetyCounter = 0;
+        while (rule.nextDate <= today && safetyCounter < 120) {
+          var alreadyCreated = transactions.some(function (item) {
+            return item.recurringRuleId === rule.id && item.date === rule.nextDate;
+          });
+          if (!alreadyCreated) {
+            transactions.push({
+              id: window.FinanceStorage.createId("txn"),
+              recurringRuleId: rule.id,
+              type: rule.type,
+              amount: toAmount(rule.amount),
+              date: rule.nextDate,
+              categoryId: rule.categoryId,
+              notes: rule.notes || rule.title || "Recurring Transaction",
+              tags: Array.isArray(rule.tags) ? rule.tags : [],
+              accountId: rule.accountId || getDefaultAccountId(),
+              createdAt: new Date().toISOString()
+            });
+            changed = true;
+          }
+          rule.nextDate = shiftDate(rule.nextDate, rule.frequency);
+          rule.updatedAt = new Date().toISOString();
+          safetyCounter += 1;
+          changed = true;
+        }
+      });
+      user.transactions = transactions;
+      return user;
+    }, false);
+
+    if (changed) {
+      state.user = nextUser;
+    }
+  }
+
+  function renderStats() {
+    var transactions = getTransactionsSorted(state.user.transactions);
+    var currentMonth = getCurrentMonthKey();
+    var today = toDateInputValue(new Date());
+    var startOfWeek = getWeekStart(today);
+
+    var summary = transactions.reduce(function (acc, transaction) {
+      var amount = toAmount(transaction.amount);
+      if (transaction.type === "income") {
+        acc.totalIncome += amount;
+      } else {
+        acc.totalExpense += amount;
+      }
+      if (transaction.date.slice(0, 7) === currentMonth) {
+        if (transaction.type === "income") {
+          acc.monthIncome += amount;
+        } else {
+          acc.monthExpense += amount;
+        }
+      }
+      if (transaction.type === "expense") {
+        if (transaction.date === today) {
+          acc.todayExpense += amount;
+        }
+        if (transaction.date >= startOfWeek && transaction.date <= today) {
+          acc.weekExpense += amount;
+        }
+        if (transaction.date.slice(0, 7) === currentMonth) {
+          acc.monthExpenseTotal += amount;
+        }
+      }
+      return acc;
+    }, {
+      totalIncome: 0,
+      totalExpense: 0,
+      monthIncome: 0,
+      monthExpense: 0,
+      todayExpense: 0,
+      weekExpense: 0,
+      monthExpenseTotal: 0
+    });
+
+    var savingsRate = summary.monthIncome > 0 ? ((summary.monthIncome - summary.monthExpense) / summary.monthIncome) * 100 : 0;
+    var balance = summary.totalIncome - summary.totalExpense;
+    var netWorth = computeNetWorth();
+
+    dom.totalBalance.textContent = formatMoney(balance);
+    dom.netWorth.textContent = formatMoney(netWorth);
+    dom.monthlyIncome.textContent = formatMoney(summary.monthIncome);
+    dom.monthlyExpense.textContent = formatMoney(summary.monthExpense);
+    dom.todaySpend.textContent = formatMoney(summary.todayExpense);
+    dom.weekSpend.textContent = formatMoney(summary.weekExpense);
+    dom.monthSpend.textContent = formatMoney(summary.monthExpenseTotal);
+    dom.savingsRate.textContent = savingsRate.toFixed(1) + "%";
+  }
+
+  function renderTransactionsTable() {
+    var transactions = applyTransactionFilters(getTransactionsSorted(state.user.transactions));
+    var countLabel = transactions.length + " records";
+    if (dom.transactionCount) {
+      dom.transactionCount.textContent = countLabel;
+    }
+    if (dom.transactionsModalCount) {
+      dom.transactionsModalCount.textContent = countLabel;
+    }
+    if (!dom.transactionsBody) {
+      return;
+    }
+    if (transactions.length === 0) {
+      dom.transactionsBody.innerHTML = "<tr><td colspan='8'>No transactions found.</td></tr>";
+      return;
+    }
+    dom.transactionsBody.innerHTML = transactions.map(function (transaction) {
+      var typeClass = transaction.type === "income" ? "text-income" : "text-expense";
+      var typeLabel = capitalize(transaction.type);
+      var tags = (transaction.tags || []).length ? escapeHtml((transaction.tags || []).join(", ")) : "-";
+      return [
+        "<tr>",
+        "<td>", escapeHtml(formatDate(transaction.date)), "</td>",
+        "<td class='", typeClass, "'>", typeLabel, "</td>",
+        "<td>", escapeHtml(formatMoney(transaction.amount)), "</td>",
+        "<td>", escapeHtml(getCategoryName(transaction.categoryId)), "</td>",
+        "<td>", escapeHtml(getAccountName(transaction.accountId)), "</td>",
+        "<td>", tags, "</td>",
+        "<td>", escapeHtml(transaction.notes || "-"), "</td>",
+        "<td><div class='action-row'>",
+        "<button class='btn btn-ghost' type='button' data-action='view-transaction' data-id='", transaction.id, "'>View</button>",
+        "<button class='btn btn-ghost' type='button' data-action='edit-transaction' data-id='", transaction.id, "'>Edit</button>",
+        "<button class='btn btn-danger' type='button' data-action='delete-transaction' data-id='", transaction.id, "'>Delete</button>",
+        "</div></td>",
+        "</tr>"
+      ].join("");
+    }).join("");
+  }
+
+  function renderCategories() {
+    var categories = (state.user.categories || []).slice().sort(function (a, b) {
+      if (a.type !== b.type) {
+        return a.type.localeCompare(b.type);
+      }
+      return a.name.localeCompare(b.name);
+    });
+    if (categories.length === 0) {
+      dom.categoriesList.innerHTML = "<p>No categories available.</p>";
+      return;
+    }
+    dom.categoriesList.innerHTML = categories.map(function (category) {
+      var deleteButton = category.system ? "" : "<button type='button' data-action='remove-category' data-id='" + category.id + "' title='Remove category'>x</button>";
+      return "<span class='pill'>" + escapeHtml(category.name) + " <small>(" + escapeHtml(category.type) + ")</small>" + deleteButton + "</span>";
+    }).join("");
+  }
+
+  function renderAccounts() {
+    var accounts = state.user.accounts || [];
+    var accountBalanceMap = computeAccountBalanceMap();
+    dom.accountsList.innerHTML = accounts.map(function (account) {
+      var balance = accountBalanceMap[account.id] || 0;
+      return [
+        "<div class='list-card'>",
+        "<div class='list-card-head'>",
+        "<strong>", escapeHtml(account.name), "</strong>",
+        "<button class='btn btn-danger' type='button' data-action='remove-account' data-id='", account.id, "'>Remove</button>",
+        "</div>",
+        "<span>Type: ", escapeHtml(account.type), "</span>",
+        "<span>Balance: ", escapeHtml(formatMoney(balance)), "</span>",
+        "</div>"
+      ].join("");
+    }).join("");
+  }
+
+  function renderBudgets() {
+    var currentMonth = getCurrentMonthKey();
+    var budgets = (state.user.budgets || []).filter(function (budget) {
+      return budget.month === currentMonth;
+    });
+    var expenseTransactions = (state.user.transactions || []).filter(function (tx) {
+      return tx.type === "expense" && tx.date.slice(0, 7) === currentMonth;
+    });
+    if (budgets.length === 0) {
+      dom.budgetsList.innerHTML = "<p>No budgets for " + currentMonth + ". Add one above.</p>";
+      return;
+    }
+    dom.budgetsList.innerHTML = budgets.map(function (budget) {
+      var spent = expenseTransactions.reduce(function (total, transaction) {
+        return transaction.categoryId === budget.categoryId ? total + toAmount(transaction.amount) : total;
+      }, 0);
+      var percent = budget.limit > 0 ? (spent / budget.limit) * 100 : 0;
+      var clampedPercent = Math.min(percent, 100);
+      var barClass = percent >= 100 ? "danger" : percent >= 80 ? "warn" : "";
+      var helperText = percent >= 100 ? "Budget exceeded." : percent >= 80 ? "Almost at limit." : "In safe range.";
+      return [
+        "<div class='list-card'>",
+        "<div class='list-card-head'>",
+        "<strong>", escapeHtml(getCategoryName(budget.categoryId)), "</strong>",
+        "<button class='btn btn-danger' type='button' data-action='remove-budget' data-id='", budget.id, "'>Remove</button>",
+        "</div>",
+        "<span>", escapeHtml(formatMoney(spent)), " / ", escapeHtml(formatMoney(budget.limit)), " used</span>",
+        "<div class='progress-wrap'><div class='progress-bar ", barClass, "' style='width:", clampedPercent.toFixed(1), "%'></div></div>",
+        "<span>", helperText, "</span>",
+        "</div>"
+      ].join("");
+    }).join("");
+  }
+
+  function renderGoals() {
+    var goals = state.user.goals || [];
+    if (goals.length === 0) {
+      dom.goalsList.innerHTML = "<p>No goals yet. Create your first savings goal.</p>";
+      return;
+    }
+    dom.goalsList.innerHTML = goals.map(function (goal) {
+      var saved = toAmount(goal.saved);
+      var target = toAmount(goal.target);
+      var percent = target > 0 ? Math.min((saved / target) * 100, 100) : 0;
+      return [
+        "<div class='list-card'>",
+        "<div class='list-card-head'>",
+        "<strong>", escapeHtml(goal.name), "</strong>",
+        "<div class='action-row'>",
+        "<button class='btn btn-primary' type='button' data-action='add-goal-funds' data-id='", goal.id, "'>Add Funds</button>",
+        "<button class='btn btn-danger' type='button' data-action='remove-goal' data-id='", goal.id, "'>Remove</button>",
+        "</div>",
+        "</div>",
+        "<span>", escapeHtml(formatMoney(saved)), " / ", escapeHtml(formatMoney(target)), "</span>",
+        goal.deadline ? "<span>Deadline: " + escapeHtml(formatDate(goal.deadline)) + "</span>" : "",
+        "<div class='progress-wrap'><div class='progress-bar' style='width:", percent.toFixed(1), "%'></div></div>",
+        "</div>"
+      ].join("");
+    }).join("");
+  }
+
+  function renderReminders() {
+    var reminders = (state.user.reminders || []).slice().sort(function (a, b) {
+      return a.dueDate.localeCompare(b.dueDate);
+    });
+    if (reminders.length === 0) {
+      dom.remindersList.innerHTML = "<p>No reminders added.</p>";
+      return;
+    }
+    var today = toDateInputValue(new Date());
+    var soonDate = shiftDate(today, "weekly");
+    dom.remindersList.innerHTML = reminders.map(function (reminder) {
+      var isOverdue = reminder.dueDate < today;
+      var dueSoon = reminder.dueDate >= today && reminder.dueDate <= soonDate;
+      var statusClass = isOverdue ? "alert-danger" : dueSoon ? "alert-warn" : "alert-info";
+      var statusText = isOverdue ? "Overdue" : dueSoon ? "Due soon" : "Planned";
+      return [
+        "<div class='list-card'>",
+        "<div class='list-card-head'>",
+        "<strong>", escapeHtml(reminder.title), "</strong>",
+        "<div class='action-row'>",
+        "<button class='btn btn-primary' type='button' data-action='mark-reminder-paid' data-id='", reminder.id, "'>Mark Paid</button>",
+        "<button class='btn btn-danger' type='button' data-action='remove-reminder' data-id='", reminder.id, "'>Remove</button>",
+        "</div>",
+        "</div>",
+        "<span>Due: ", escapeHtml(formatDate(reminder.dueDate)), " (", statusText, ")</span>",
+        reminder.amount > 0 ? "<span>Amount: " + escapeHtml(formatMoney(reminder.amount)) + "</span>" : "",
+        "<span class='alert " + statusClass + "'>Frequency: " + escapeHtml(reminder.frequency || "none") + "</span>",
+        "</div>"
+      ].join("");
+    }).join("");
+  }
+
+  function renderRecurringRules() {
+    var rules = state.user.recurringRules || [];
+    if (rules.length === 0) {
+      dom.recurringList.innerHTML = "<p>No recurring rules yet. Enable recurring while adding a transaction.</p>";
+      return;
+    }
+    dom.recurringList.innerHTML = rules.map(function (rule) {
+      return [
+        "<div class='list-card'>",
+        "<div class='list-card-head'>",
+        "<strong>", escapeHtml(rule.title || getCategoryName(rule.categoryId)), "</strong>",
+        "<div class='action-row'>",
+        "<button class='btn btn-ghost' type='button' data-action='toggle-recurring' data-id='", rule.id, "'>", rule.active ? "Pause" : "Resume", "</button>",
+        "<button class='btn btn-danger' type='button' data-action='remove-recurring' data-id='", rule.id, "'>Delete</button>",
+        "</div>",
+        "</div>",
+        "<span>", escapeHtml(capitalize(rule.type)), " • ", escapeHtml(formatMoney(rule.amount)), "</span>",
+        "<span>Category: ", escapeHtml(getCategoryName(rule.categoryId)), "</span>",
+        "<span>Frequency: ", escapeHtml(rule.frequency), " • Next date: ", escapeHtml(formatDate(rule.nextDate)), "</span>",
+        rule.active ? "<span class='alert alert-info'>Automation active.</span>" : "<span class='alert alert-warn'>Automation paused.</span>",
+        "</div>"
+      ].join("");
+    }).join("");
+  }
+
+  function renderInsights() {
+    var insights = generateInsights();
+    if (insights.length === 0) {
+      dom.insightsList.innerHTML = "<p>No insights yet. Add a few transactions to unlock suggestions.</p>";
+      return;
+    }
+    dom.insightsList.innerHTML = insights.map(function (insight) {
+      var className = insight.level === "danger" ? "alert-danger" : insight.level === "warn" ? "alert-warn" : "alert-info";
+      return "<div class='alert " + className + "'>" + escapeHtml(insight.message) + "</div>";
+    }).join("");
+  }
+
+  function generateInsights() {
+    var insights = [];
+    var month = getCurrentMonthKey();
+    var transactions = state.user.transactions || [];
+    var expensesThisMonth = transactions.filter(function (tx) {
+      return tx.type === "expense" && tx.date.slice(0, 7) === month;
+    });
+    var incomeThisMonth = transactions.filter(function (tx) {
+      return tx.type === "income" && tx.date.slice(0, 7) === month;
+    });
+    var totalExpense = expensesThisMonth.reduce(function (total, transaction) {
+      return total + toAmount(transaction.amount);
+    }, 0);
+    var totalIncome = incomeThisMonth.reduce(function (total, transaction) {
+      return total + toAmount(transaction.amount);
+    }, 0);
+
+    if (totalExpense > totalIncome && totalIncome > 0) {
+      insights.push({ level: "danger", message: "You are spending more than you earn this month. Consider reducing discretionary expenses." });
+    }
+    if (totalIncome > 0) {
+      var savingsRate = ((totalIncome - totalExpense) / totalIncome) * 100;
+      if (savingsRate < 20) {
+        insights.push({ level: "warn", message: "Savings rate is below 20%. Try setting tighter category budgets." });
+      } else {
+        insights.push({ level: "info", message: "Savings rate is " + savingsRate.toFixed(1) + "%. Great momentum." });
+      }
+    }
+
+    var categoryTotals = aggregateExpenseByCategory(expensesThisMonth);
+    var foodCategory = findCategoryByName("Food", "expense");
+    var subscriptionCategory = findCategoryByName("Subscriptions", "expense");
+    if (foodCategory) {
+      var foodSpend = categoryTotals[foodCategory.id] || 0;
+      if (totalExpense > 0 && foodSpend / totalExpense > 0.3) {
+        insights.push({ level: "warn", message: "Food spend is above 30% of monthly expenses. Meal planning could reduce this." });
+      }
+    }
+    if (subscriptionCategory) {
+      var subscriptionSpend = categoryTotals[subscriptionCategory.id] || 0;
+      if (subscriptionSpend > 0 && subscriptionSpend / Math.max(totalExpense, 1) > 0.12) {
+        insights.push({ level: "warn", message: "Subscriptions are taking a significant share of spend. Review unused plans." });
+      }
+    }
+
+    getCurrentMonthBudgetAlerts().forEach(function (alert) {
+      insights.push(alert);
+    });
+
+    var nextSevenDate = shiftDate(toDateInputValue(new Date()), "weekly");
+    var dueSoonCount = (state.user.reminders || []).filter(function (reminder) {
+      return reminder.dueDate >= toDateInputValue(new Date()) && reminder.dueDate <= nextSevenDate;
+    }).length;
+    if (dueSoonCount > 0) {
+      insights.push({ level: "info", message: dueSoonCount + " reminder(s) due in the next 7 days." });
+    }
+
+    var trendMessage = getSpendingTrendMessage();
+    if (trendMessage) {
+      insights.push(trendMessage);
+    }
+    return insights.slice(0, 8);
+  }
+
+  function renderCharts() {
+    var allTransactions = applyTransactionFilters(getTransactionsSorted(state.user.transactions));
+    var month = getCurrentMonthKey();
+    var monthExpenses = allTransactions.filter(function (transaction) {
+      return transaction.type === "expense" && transaction.date.slice(0, 7) === month;
+    });
+
+    var categoryTotalsMap = aggregateExpenseByCategory(monthExpenses);
+    var pieLabels = Object.keys(categoryTotalsMap).map(function (categoryId) {
+      return getCategoryName(categoryId);
+    });
+    var pieValues = Object.keys(categoryTotalsMap).map(function (categoryId) {
+      return toAmount(categoryTotalsMap[categoryId]);
+    });
+    if (pieLabels.length === 0) {
+      pieLabels = ["No Data"];
+      pieValues = [1];
+    }
+    window.ChartService.renderPie({ labels: pieLabels, values: pieValues });
+    window.ChartService.renderMonthlyBar(buildMonthlyTrendData(allTransactions, 6));
+    window.ChartService.renderBalanceLine(buildRunningBalanceData(allTransactions));
+    window.ChartService.renderDailyPattern(buildDailySpendData(allTransactions, 14));
+  }
+
+  function buildMonthlyTrendData(transactions, monthsBackCount) {
+    var monthKeys = getRecentMonthKeys(monthsBackCount - 1);
+    var labels = [];
+    var incomeValues = [];
+    var expenseValues = [];
+    monthKeys.forEach(function (monthKey) {
+      labels.push(formatMonthLabel(monthKey));
+      var income = transactions.reduce(function (total, transaction) {
+        return transaction.type === "income" && transaction.date.slice(0, 7) === monthKey ? total + toAmount(transaction.amount) : total;
+      }, 0);
+      var expense = transactions.reduce(function (total, transaction) {
+        return transaction.type === "expense" && transaction.date.slice(0, 7) === monthKey ? total + toAmount(transaction.amount) : total;
+      }, 0);
+      incomeValues.push(income);
+      expenseValues.push(expense);
+    });
+    return { labels: labels, incomeValues: incomeValues, expenseValues: expenseValues };
+  }
+
+  function buildRunningBalanceData(transactions) {
+    var sorted = transactions.slice().sort(function (a, b) {
+      if (a.date !== b.date) {
+        return a.date.localeCompare(b.date);
+      }
+      return String(a.id).localeCompare(String(b.id));
+    });
+    var labels = [];
+    var values = [];
+    var running = 0;
+    sorted.forEach(function (transaction) {
+      var amount = toAmount(transaction.amount);
+      running += transaction.type === "income" ? amount : -amount;
+      labels.push(formatDate(transaction.date));
+      values.push(running);
+    });
+    if (labels.length === 0) {
+      labels.push("No Data");
+      values.push(0);
+    }
+    return { labels: labels, values: values };
+  }
+
+  function buildDailySpendData(transactions, dayCount) {
+    var today = new Date();
+    var labels = [];
+    var values = [];
+    var lookup = {};
+    transactions.forEach(function (transaction) {
+      if (transaction.type !== "expense") {
+        return;
+      }
+      lookup[transaction.date] = (lookup[transaction.date] || 0) + toAmount(transaction.amount);
+    });
+    for (var offset = dayCount - 1; offset >= 0; offset -= 1) {
+      var date = new Date(today);
+      date.setDate(today.getDate() - offset);
+      var key = toDateInputValue(date);
+      labels.push(key.slice(5));
+      values.push(lookup[key] || 0);
+    }
+    return { labels: labels, values: values };
+  }
+
+  function exportTransactionsCsv() {
+    var transactions = getTransactionsSorted(state.user.transactions);
+    if (transactions.length === 0) {
+      setAppMessage("No transactions available to export.", true);
+      return;
+    }
+    var rows = [["id", "date", "type", "amount", "category", "account", "tags", "notes"]];
+    transactions.forEach(function (transaction) {
+      rows.push([
+        transaction.id,
+        transaction.date,
+        transaction.type,
+        toAmount(transaction.amount).toFixed(2),
+        getCategoryName(transaction.categoryId),
+        getAccountName(transaction.accountId),
+        (transaction.tags || []).join("|"),
+        transaction.notes || ""
+      ]);
+    });
+    var csvText = rows.map(function (row) {
+      return row.map(csvCell).join(",");
+    }).join("\n");
+    downloadFile("transactions_" + toDateInputValue(new Date()) + ".csv", csvText, "text/csv;charset=utf-8;");
+    setAppMessage("CSV exported successfully.", false);
+  }
+
+  function exportSummaryPdf() {
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      setAppMessage("PDF library failed to load. Please retry with internet enabled.", true);
+      return;
+    }
+    var jsPDF = window.jspdf.jsPDF;
+    var documentPdf = new jsPDF();
+    var month = getCurrentMonthKey();
+    var income = getMonthIncome(month);
+    var expense = getMonthExpense(month);
+    var balance = income - expense;
+    var insights = generateInsights();
+
+    documentPdf.setFontSize(16);
+    documentPdf.text("Finance Tracker Summary", 14, 16);
+    documentPdf.setFontSize(10);
+    documentPdf.text("Month: " + month, 14, 24);
+    documentPdf.text("Income: " + formatMoney(income), 14, 31);
+    documentPdf.text("Expense: " + formatMoney(expense), 14, 38);
+    documentPdf.text("Net: " + formatMoney(balance), 14, 45);
+
+    documentPdf.setFontSize(12);
+    documentPdf.text("Top Insights", 14, 56);
+    documentPdf.setFontSize(10);
+    if (insights.length === 0) {
+      documentPdf.text("- No insights yet.", 14, 63);
+    } else {
+      insights.slice(0, 6).forEach(function (insight, index) {
+        documentPdf.text((index + 1) + ". " + insight.message, 14, 63 + (index * 7));
+      });
+    }
+    documentPdf.save("finance_summary_" + month + ".pdf");
+    setAppMessage("PDF exported successfully.", false);
+  }
+
+  function backupUserData() {
+    var payload = {
+      exportedAt: new Date().toISOString(),
+      app: "Finance Tracker Pro",
+      data: state.user
+    };
+    downloadFile("finance_backup_" + toDateInputValue(new Date()) + ".json", JSON.stringify(payload, null, 2), "application/json");
+    setAppMessage("Backup downloaded.", false);
+  }
+
+  function restoreUserDataFromFile(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) {
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (readerEvent) {
+      try {
+        var parsed = JSON.parse(readerEvent.target.result);
+        var imported = parsed.data ? parsed.data : parsed;
+        if (!imported || typeof imported !== "object") {
+          throw new Error("Invalid backup file.");
+        }
+        updateUser(function (user) {
+          var merged = Object.assign({}, imported);
+          merged.id = user.id;
+          merged.email = user.email;
+          merged.passwordHash = user.passwordHash;
+          merged.settings = merged.settings || user.settings || {};
+          merged.settings.pinHash = user.settings && user.settings.pinHash ? user.settings.pinHash : (merged.settings.pinHash || "");
+          return merged;
+        });
+        setAppMessage("Backup restored.", false);
+        renderAll();
+      } catch (error) {
+        setAppMessage("Restore failed: " + error.message, true);
+      } finally {
+        dom.restoreInput.value = "";
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function populateDropdowns() {
+    populateTransactionCategorySelect(dom.transactionType.value || "expense", dom.transactionCategory.value || AUTO_CATEGORY_VALUE);
+    populateFilterCategorySelect();
+    populateBudgetCategorySelect();
+    populateAccountsSelect(dom.transactionAccount.value || getDefaultAccountId());
+  }
+
+  function populateTransactionCategorySelect(type, selectedCategoryId) {
+    var options = (state.user.categories || []).filter(function (category) {
+      return category.type === type;
+    });
+    var html = ["<option value='" + AUTO_CATEGORY_VALUE + "'>Auto Detect</option>"].concat(options.map(function (category) {
+      var isSelected = category.id === selectedCategoryId ? " selected" : "";
+      return "<option value='" + category.id + "'" + isSelected + ">" + escapeHtml(category.name) + "</option>";
+    }));
+    dom.transactionCategory.innerHTML = html.join("");
+
+    if (selectedCategoryId && selectedCategoryId !== AUTO_CATEGORY_VALUE && options.some(function (category) {
+      return category.id === selectedCategoryId;
+    })) {
+      dom.transactionCategory.value = selectedCategoryId;
+    } else {
+      dom.transactionCategory.value = AUTO_CATEGORY_VALUE;
+    }
+  }
+
+  function populateFilterCategorySelect() {
+    var selected = dom.filterCategory.value || "";
+    var html = ["<option value=''>All Categories</option>"].concat((state.user.categories || []).map(function (category) {
+      return "<option value='" + category.id + "'>" + escapeHtml(category.name) + " (" + escapeHtml(category.type) + ")</option>";
+    }));
+    dom.filterCategory.innerHTML = html.join("");
+    dom.filterCategory.value = selected;
+  }
+
+  function populateBudgetCategorySelect() {
+    var selected = dom.budgetCategory.value || "";
+    var categories = (state.user.categories || []).filter(function (category) {
+      return category.type === "expense";
+    });
+    dom.budgetCategory.innerHTML = categories.map(function (category) {
+      return "<option value='" + category.id + "'>" + escapeHtml(category.name) + "</option>";
+    }).join("");
+    if (selected && categories.some(function (category) {
+      return category.id === selected;
+    })) {
+      dom.budgetCategory.value = selected;
+    }
+  }
+
+  function populateAccountsSelect(selectedAccountId) {
+    var accounts = state.user.accounts || [];
+    dom.transactionAccount.innerHTML = accounts.map(function (account) {
+      return "<option value='" + account.id + "'>" + escapeHtml(account.name) + " (" + escapeHtml(account.type) + ")</option>";
+    }).join("");
+    if (selectedAccountId && accounts.some(function (account) {
+      return account.id === selectedAccountId;
+    })) {
+      dom.transactionAccount.value = selectedAccountId;
+    } else if (accounts[0]) {
+      dom.transactionAccount.value = accounts[0].id;
+    }
+  }
+
+  function applyTransactionFilters(transactions) {
+    var filters = state.filters;
+    return transactions.filter(function (transaction) {
+      if (filters.categoryId && transaction.categoryId !== filters.categoryId) {
+        return false;
+      }
+      if (filters.type && transaction.type !== filters.type) {
+        return false;
+      }
+      if (filters.minAmount && toAmount(transaction.amount) < toAmount(filters.minAmount)) {
+        return false;
+      }
+      if (filters.maxAmount && toAmount(transaction.amount) > toAmount(filters.maxAmount)) {
+        return false;
+      }
+      if (filters.fromDate && transaction.date < filters.fromDate) {
+        return false;
+      }
+      if (filters.toDate && transaction.date > filters.toDate) {
+        return false;
+      }
+      if (filters.tag) {
+        var tags = (transaction.tags || []).map(function (tag) {
+          return tag.toLowerCase();
+        });
+        if (!tags.some(function (tag) {
+          return tag.indexOf(filters.tag) !== -1;
+        })) {
+          return false;
+        }
+      }
+      if (filters.keyword) {
+        var categoryName = getCategoryName(transaction.categoryId).toLowerCase();
+        var accountName = getAccountName(transaction.accountId).toLowerCase();
+        var notes = String(transaction.notes || "").toLowerCase();
+        var amountText = String(transaction.amount);
+        var tagsText = (transaction.tags || []).join(" ").toLowerCase();
+        var joined = [categoryName, accountName, notes, amountText, tagsText].join(" ");
+        if (joined.indexOf(filters.keyword) === -1) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  function getCurrentMonthBudgetAlerts() {
+    var month = getCurrentMonthKey();
+    var budgets = (state.user.budgets || []).filter(function (budget) {
+      return budget.month === month;
+    });
+    var expenses = (state.user.transactions || []).filter(function (transaction) {
+      return transaction.type === "expense" && transaction.date.slice(0, 7) === month;
+    });
+    return budgets.reduce(function (alerts, budget) {
+      var spent = expenses.reduce(function (total, transaction) {
+        return transaction.categoryId === budget.categoryId ? total + toAmount(transaction.amount) : total;
+      }, 0);
+      var usage = budget.limit > 0 ? spent / budget.limit : 0;
+      if (usage >= 1) {
+        alerts.push({ level: "danger", message: "Budget exceeded for " + getCategoryName(budget.categoryId) + "." });
+      } else if (usage >= 0.8) {
+        alerts.push({ level: "warn", message: "Budget for " + getCategoryName(budget.categoryId) + " is above 80%." });
+      }
+      return alerts;
+    }, []);
+  }
+
+  function getSpendingTrendMessage() {
+    var months = getRecentMonthKeys(2);
+    var currentMonth = months[2];
+    var previousMonth = months[1];
+    var currentExpense = getMonthExpense(currentMonth);
+    var previousExpense = getMonthExpense(previousMonth);
+    if (previousExpense <= 0) {
+      return null;
+    }
+    var change = ((currentExpense - previousExpense) / previousExpense) * 100;
+    if (change > 20) {
+      return { level: "warn", message: "Monthly expenses increased by " + change.toFixed(1) + "% compared to last month." };
+    }
+    if (change < -15) {
+      return { level: "info", message: "Nice work. Expenses dropped by " + Math.abs(change).toFixed(1) + "% from last month." };
+    }
+    return null;
+  }
+
+  function updateUser(mutator, rerender) {
+    var shouldRerender = rerender !== false;
+    var updated = window.AuthService.updateCurrentUser(function (user) {
+      return mutator(user) || user;
+    });
+    state.user = updated;
+    if (shouldRerender) {
+      renderAll();
+    }
+    return updated;
+  }
+
+  function setAuthMessage(message, isError) {
+    dom.authMessage.textContent = message || "";
+    dom.authMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
+  }
+
+  function setAppMessage(message, isError) {
+    dom.exportMessage.textContent = message || "";
+    dom.exportMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
+  }
+
+  function toggleTheme() {
+    var currentTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    var nextTheme = currentTheme === "dark" ? "light" : "dark";
+    applyTheme(nextTheme, true);
+  }
+
+  function applyTheme(theme, persist) {
+    document.documentElement.setAttribute("data-theme", theme);
+    dom.themeToggle.textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
+    if (state.user && window.ChartService) {
+      renderCharts();
+    }
+    if (persist && state.user) {
+      updateUser(function (user) {
+        user.settings = user.settings || {};
+        user.settings.theme = theme;
+        return user;
+      }, false);
+    }
+  }
+
+  function inferCategoryId(type, notes) {
+    var text = String(notes || "").toLowerCase();
+    var keywordMap = categoryKeywords[type] || {};
+    var categories = state.user.categories || [];
+    var matchedCategoryName = "";
+    Object.keys(keywordMap).some(function (categoryName) {
+      var keywords = keywordMap[categoryName] || [];
+      var matched = keywords.some(function (keyword) {
+        return text.indexOf(keyword) !== -1;
+      });
+      if (matched) {
+        matchedCategoryName = categoryName;
+      }
+      return matched;
+    });
+    if (matchedCategoryName) {
+      var matchedCategory = categories.find(function (category) {
+        return category.type === type && category.name.toLowerCase() === matchedCategoryName.toLowerCase();
+      });
+      if (matchedCategory) {
+        return matchedCategory.id;
+      }
+    }
+    var firstCategoryForType = categories.find(function (category) {
+      return category.type === type;
+    });
+    return firstCategoryForType ? firstCategoryForType.id : "";
+  }
+
+  function getTransactionsSorted(list) {
+    return (list || []).slice().sort(function (a, b) {
+      if (a.date !== b.date) {
+        return b.date.localeCompare(a.date);
+      }
+      return String(b.id).localeCompare(String(a.id));
+    });
+  }
+
+  function aggregateExpenseByCategory(expenseTransactions) {
+    return expenseTransactions.reduce(function (map, transaction) {
+      var categoryId = transaction.categoryId || "unknown";
+      map[categoryId] = (map[categoryId] || 0) + toAmount(transaction.amount);
+      return map;
+    }, {});
+  }
+
+  function findCategoryByName(name, type) {
+    return (state.user.categories || []).find(function (category) {
+      return category.type === type && category.name.toLowerCase() === String(name).toLowerCase();
+    });
+  }
+
+  function computeAccountBalanceMap() {
+    var balances = {};
+    (state.user.accounts || []).forEach(function (account) {
+      balances[account.id] = toAmount(account.initialBalance);
+    });
+    (state.user.transactions || []).forEach(function (transaction) {
+      var accountId = transaction.accountId || getDefaultAccountId();
+      var amount = toAmount(transaction.amount);
+      if (balances[accountId] == null) {
+        balances[accountId] = 0;
+      }
+      balances[accountId] += transaction.type === "income" ? amount : -amount;
+    });
+    return balances;
+  }
+
+  function computeNetWorth() {
+    var accountMap = computeAccountBalanceMap();
+    return Object.keys(accountMap).reduce(function (total, accountId) {
+      return total + toAmount(accountMap[accountId]);
+    }, 0);
+  }
+
+  function getCategoryName(categoryId) {
+    var category = (state.user.categories || []).find(function (item) {
+      return item.id === categoryId;
+    });
+    return category ? category.name : "Uncategorized";
+  }
+
+  function getAccountName(accountId) {
+    var account = (state.user.accounts || []).find(function (item) {
+      return item.id === accountId;
+    });
+    return account ? account.name : "Unknown Account";
+  }
+
+  function getDefaultAccountId() {
+    return state.user && state.user.accounts && state.user.accounts[0] ? state.user.accounts[0].id : "";
+  }
+
+  function getMonthIncome(monthKey) {
+    return (state.user.transactions || []).reduce(function (total, transaction) {
+      return transaction.type === "income" && transaction.date.slice(0, 7) === monthKey ? total + toAmount(transaction.amount) : total;
+    }, 0);
+  }
+
+  function getMonthExpense(monthKey) {
+    return (state.user.transactions || []).reduce(function (total, transaction) {
+      return transaction.type === "expense" && transaction.date.slice(0, 7) === monthKey ? total + toAmount(transaction.amount) : total;
+    }, 0);
+  }
+
+  function getRecentMonthKeys(offsetCount) {
+    var now = new Date();
+    var months = [];
+    for (var index = offsetCount; index >= 0; index -= 1) {
+      var date = new Date(now.getFullYear(), now.getMonth() - index, 1);
+      months.push(date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0"));
+    }
+    return months;
+  }
+
+  function getCurrentMonthKey() {
+    var today = new Date();
+    return today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0");
+  }
+
+  function getWeekStart(dateString) {
+    var date = new Date(dateString + "T00:00:00");
+    var day = date.getDay();
+    var shift = day === 0 ? 6 : day - 1;
+    date.setDate(date.getDate() - shift);
+    return toDateInputValue(date);
+  }
+
+  function shiftDate(dateString, frequency) {
+    var date = new Date(dateString + "T00:00:00");
+    if (frequency === "weekly") {
+      date.setDate(date.getDate() + 7);
+    } else {
+      date.setMonth(date.getMonth() + 1);
+    }
+    return toDateInputValue(date);
+  }
+
+  function parseTags(text) {
+    return String(text || "")
+      .split(",")
+      .map(function (tag) {
+        return tag.trim().toLowerCase();
+      })
+      .filter(function (tag, index, list) {
+        return tag && list.indexOf(tag) === index;
+      });
+  }
+
+  function toDateInputValue(date) {
+    var year = date.getFullYear();
+    var month = String(date.getMonth() + 1).padStart(2, "0");
+    var day = String(date.getDate()).padStart(2, "0");
+    return year + "-" + month + "-" + day;
+  }
+
+  function toAmount(value) {
+    var number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function formatDate(dateString) {
+    if (!dateString) {
+      return "-";
+    }
+    var date = new Date(dateString + "T00:00:00");
+    return date.toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    });
+  }
+
+  function formatDateTime(value) {
+    if (!value) {
+      return "-";
+    }
+    var date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "-";
+    }
+    return date.toLocaleString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
+  function formatMonthLabel(monthKey) {
+    var parts = monthKey.split("-");
+    var date = new Date(Number(parts[0]), Number(parts[1]) - 1, 1);
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      year: "2-digit"
+    });
+  }
+
+  function formatMoney(amountValue) {
+    var currency = state.user && state.user.settings && state.user.settings.currency ? state.user.settings.currency : "INR";
+    var amount = toAmount(amountValue);
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: currency,
+        maximumFractionDigits: 2
+      }).format(amount);
+    } catch (error) {
+      return currency + " " + amount.toFixed(2);
+    }
+  }
+
+  function capitalize(text) {
+    var value = String(text || "");
+    if (!value) {
+      return "";
+    }
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+
+  function escapeHtml(text) {
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function csvCell(value) {
+    var text = String(value == null ? "" : value);
+    if (text.indexOf(",") >= 0 || text.indexOf('"') >= 0 || text.indexOf("\n") >= 0) {
+      return '"' + text.replace(/"/g, '""') + '"';
+    }
+    return text;
+  }
+
+  function downloadFile(name, content, mimeType) {
+    var blob = new Blob([content], { type: mimeType });
+    var url = URL.createObjectURL(blob);
+    var anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }
+})();
