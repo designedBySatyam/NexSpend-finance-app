@@ -53,6 +53,9 @@ Manual Render Web Service settings (if not using blueprint):
 - Environment Variables:
   - `MONGODB_URI` = your MongoDB connection string
   - `MONGODB_DB_NAME` = `nexspend` (optional)
+  - Important: set only URI as value, for example `mongodb+srv://...`
+    - Do not include `MONGODB_URI=` in value
+    - Do not wrap value in quotes
 
 Persistent data note:
 - Recommended: use MongoDB Atlas with `MONGODB_URI` for persistent cloud data.

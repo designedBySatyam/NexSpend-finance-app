@@ -21,7 +21,24 @@ const upload = multer({
 const PORT = Number(process.env.PORT || 4000);
 const DB_PATH = path.join(__dirname, "..", "data", "db.json");
 const FRONTEND_DIR = path.join(__dirname, "..", "..", "frontend");
-const MONGODB_URI = String(process.env.MONGODB_URI || "").trim();
+function normalizeMongoUri(value) {
+  let uri = String(value || "").trim();
+  if (!uri) {
+    return "";
+  }
+  if (/^MONGODB_URI\s*=/i.test(uri)) {
+    uri = uri.replace(/^MONGODB_URI\s*=\s*/i, "").trim();
+  }
+  if (
+    (uri.startsWith('"') && uri.endsWith('"')) ||
+    (uri.startsWith("'") && uri.endsWith("'"))
+  ) {
+    uri = uri.slice(1, -1).trim();
+  }
+  return uri;
+}
+
+const MONGODB_URI = normalizeMongoUri(process.env.MONGODB_URI);
 const MONGODB_DB_NAME = String(process.env.MONGODB_DB_NAME || "nexspend").trim() || "nexspend";
 const USE_MONGODB = Boolean(MONGODB_URI);
 const USERS_COLLECTION_NAME = "users";
@@ -84,6 +101,16 @@ async function initializeStorage() {
   if (!USE_MONGODB) {
     ensureDbFile();
     return "file";
+  }
+
+  const hasValidScheme =
+    MONGODB_URI.startsWith("mongodb://") ||
+    MONGODB_URI.startsWith("mongodb+srv://");
+  if (!hasValidScheme) {
+    throw new Error(
+      "Invalid MONGODB_URI. It must start with mongodb:// or mongodb+srv://. " +
+      "In Render, set only the URI value (no MONGODB_URI= prefix, no quotes)."
+    );
   }
 
   mongoClient = new MongoClient(MONGODB_URI, {
