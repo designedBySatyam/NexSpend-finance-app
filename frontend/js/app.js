@@ -4,6 +4,9 @@
   var state = {
     user: null,
     activeSection: "overview",
+    lastAppSection: "overview",
+    activeSettingsSection: "profile",
+    isSettingsMode: false,
     filters: {
       keyword: "",
       categoryId: "",
@@ -28,6 +31,7 @@
   ).replace(/\/+$/, "");
   var RUNTIME_API_BASE = BACKEND_API_BASE;
   var protectedPromptState = null;
+  var inactivityLockTimerId = null;
 
   var categoryKeywords = {
     expense: {
@@ -176,7 +180,10 @@
     dom.importTransactionsInput = byId("importTransactionsInput");
     dom.importPdfInput = byId("importPdfInput");
     dom.exportMessage = byId("exportMessage");
-    dom.profileModal = byId("profileModal");
+    dom.settingsPanel = byId("settingsWorkspace");
+    dom.settingsSidebarNav = byId("settingsSidebarNav");
+    dom.settingsNavButtons = Array.prototype.slice.call(document.querySelectorAll("#settingsSidebarNav [data-settings-nav]"));
+    dom.settingsSectionPanels = Array.prototype.slice.call(document.querySelectorAll("[data-settings-panel]"));
     dom.profileForm = byId("profileForm");
     dom.profileNameInput = byId("profileNameInput");
     dom.profileEmailInput = byId("profileEmailInput");
@@ -186,6 +193,14 @@
     dom.newPasswordInput = byId("newPasswordInput");
     dom.confirmPasswordInput = byId("confirmPasswordInput");
     dom.changePasswordMessage = byId("changePasswordMessage");
+    dom.changePinForm = byId("changePinForm");
+    dom.newPinInput = byId("newPinInput");
+    dom.confirmPinInput = byId("confirmPinInput");
+    dom.changePinMessage = byId("changePinMessage");
+    dom.autoLockForm = byId("autoLockForm");
+    dom.autoLockEnabledInput = byId("autoLockEnabledInput");
+    dom.autoLockMinutesInput = byId("autoLockMinutesInput");
+    dom.autoLockMessage = byId("autoLockMessage");
     dom.forgotPasswordModal = byId("forgotPasswordModal");
     dom.forgotPasswordForm = byId("forgotPasswordForm");
     dom.forgotPasswordEmailInput = byId("forgotPasswordEmailInput");
@@ -199,11 +214,12 @@
     dom.protectedPromptForm = byId("protectedPromptForm");
     dom.protectedPromptTitle = byId("protectedPromptTitle");
     dom.protectedPromptMessage = byId("protectedPromptMessage");
+    dom.protectedPromptLabel = byId("protectedPromptLabel");
     dom.protectedPromptInput = byId("protectedPromptInput");
     dom.protectedPromptError = byId("protectedPromptError");
     dom.protectedPromptOkBtn = byId("protectedPromptOkBtn");
 
-    dom.sectionButtons = Array.prototype.slice.call(document.querySelectorAll(".section-nav-btn"));
+    dom.sectionButtons = Array.prototype.slice.call(document.querySelectorAll("#sectionNav .section-nav-btn"));
     dom.appSections = Array.prototype.slice.call(document.querySelectorAll("[data-app-section]"));
   }
 
@@ -225,7 +241,15 @@
     dom.logoutBtn.addEventListener("click", handleLogout);
     dom.lockBtn.addEventListener("click", handleLock);
     if (dom.editProfileBtn) {
-      dom.editProfileBtn.addEventListener("click", openProfileModal);
+      dom.editProfileBtn.addEventListener("click", function () {
+        openSettingsPanel("profile");
+      });
+    }
+    if (dom.settingsSidebarNav) {
+      dom.settingsSidebarNav.addEventListener("click", handleSettingsSidebarNavClick);
+    }
+    if (dom.settingsPanel) {
+      dom.settingsPanel.addEventListener("click", handleSettingsWorkspaceClick);
     }
     if (dom.sectionNav) {
       dom.sectionNav.addEventListener("click", handleSectionNavClick);
@@ -268,14 +292,20 @@
     if (dom.transactionRecordModal) {
       dom.transactionRecordModal.addEventListener("click", handleTransactionRecordModalClick);
     }
-    if (dom.profileModal) {
-      dom.profileModal.addEventListener("click", handleProfileModalClick);
-    }
     if (dom.profileForm) {
       dom.profileForm.addEventListener("submit", handleProfileFormSubmit);
     }
     if (dom.changePasswordForm) {
       dom.changePasswordForm.addEventListener("submit", handleChangePasswordFormSubmit);
+    }
+    if (dom.changePinForm) {
+      dom.changePinForm.addEventListener("submit", handleChangePinFormSubmit);
+    }
+    if (dom.autoLockForm) {
+      dom.autoLockForm.addEventListener("submit", handleAutoLockFormSubmit);
+    }
+    if (dom.autoLockEnabledInput) {
+      dom.autoLockEnabledInput.addEventListener("change", handleAutoLockToggleChange);
     }
     if (dom.forgotPasswordModal) {
       dom.forgotPasswordModal.addEventListener("click", handleForgotPasswordModalClick);
@@ -313,6 +343,10 @@
       dom.protectedPromptModal.addEventListener("click", handleProtectedPromptModalClick);
     }
     document.addEventListener("keydown", handleGlobalKeyDown);
+    document.addEventListener("pointerdown", handleAutoLockActivity);
+    document.addEventListener("touchstart", handleAutoLockActivity, { passive: true });
+    document.addEventListener("scroll", handleAutoLockActivity, { passive: true });
+    document.addEventListener("keydown", handleAutoLockActivity);
   }
 
   function setDefaultDates() {
@@ -375,6 +409,7 @@
   }
 
   function handleLogout() {
+    clearAutoLockInactivityTimer();
     window.AuthService.logout();
     state.user = null;
     syncViewFromSession();
@@ -417,6 +452,7 @@
     setActiveSection(state.activeSection || "overview");
     renderAll();
     refreshCurrentUserFromBackendSilently();
+    syncAutoLockTimerState();
   }
 
   function refreshCurrentUserFromBackendSilently() {
@@ -436,7 +472,7 @@
       });
   }
 
-  function handleSectionNavClick(event) {
+  async function handleSectionNavClick(event) {
     var button = event.target.closest("button[data-section]");
     if (!button) {
       return;
@@ -445,10 +481,65 @@
     if (!sectionName) {
       return;
     }
+    if (sectionName === "export" && state.activeSection !== "export") {
+      var isVerified = await promptForDataVaultPin();
+      if (!isVerified) {
+        return;
+      }
+    }
     setActiveSection(sectionName);
   }
 
+  async function promptForDataVaultPin() {
+    if (!hasPinConfigured()) {
+      openPinSettingsModal();
+      setChangePinMessage("Set a 4 to 6 digit PIN to unlock Data Vault.", true);
+      return false;
+    }
+
+    var promptErrorText = "";
+    while (true) {
+      var pin = await openProtectedPromptModal({
+        title: "Unlock Data Vault",
+        message: "Enter your 4 to 6 digit PIN to continue.",
+        label: "Security PIN",
+        placeholder: "Enter PIN",
+        confirmLabel: "Unlock",
+        autocomplete: "off",
+        inputType: "password",
+        inputMode: "numeric",
+        minLength: 4,
+        maxLength: 6,
+        errorText: promptErrorText,
+        validate: function (value) {
+          if (!value) {
+            return "PIN is required.";
+          }
+          if (!/^\d{4,6}$/.test(value)) {
+            return "PIN must be 4 to 6 digits.";
+          }
+          return "";
+        }
+      });
+
+      if (!pin) {
+        return false;
+      }
+
+      try {
+        window.AuthService.unlockSession(pin);
+        return true;
+      } catch (error) {
+        promptErrorText = error && error.message ? error.message : "Incorrect PIN.";
+      }
+    }
+  }
+
   function setActiveSection(sectionName) {
+    if (state.isSettingsMode) {
+      state.lastAppSection = sectionName || state.lastAppSection || "overview";
+      return;
+    }
     var availableSections = (dom.appSections || []).map(function (section) {
       return section.getAttribute("data-app-section");
     });
@@ -487,8 +578,18 @@
 
   function updateQuickAddVisibility() {
     var isAppVisible = dom.appView && !dom.appView.classList.contains("hidden");
-    var shouldShow = isAppVisible && state.activeSection === "transactions";
+    var shouldShow = isAppVisible && !state.isSettingsMode && state.activeSection === "transactions";
     dom.quickAddFab.classList.toggle("hidden", !shouldShow);
+  }
+
+  function syncSidebarNavigationMode(isApp) {
+    var showSettingsSidebar = Boolean(isApp && state.isSettingsMode);
+    if (dom.sectionNav) {
+      dom.sectionNav.classList.toggle("hidden", !isApp || showSettingsSidebar);
+    }
+    if (dom.settingsSidebarNav) {
+      dom.settingsSidebarNav.classList.toggle("hidden", !showSettingsSidebar);
+    }
   }
 
   function showView(view) {
@@ -498,7 +599,7 @@
     if (!isApp) {
       closeAllTransactionsModal();
       closeTransactionRecord();
-      closeProfileModal();
+      closeSettingsPanel();
     }
     if (!isAuth) {
       closeForgotPasswordModal();
@@ -506,19 +607,28 @@
     dom.authView.classList.toggle("hidden", !isAuth);
     dom.pinUnlockView.classList.toggle("hidden", !isPin);
     dom.appView.classList.toggle("hidden", !isApp);
-    if (dom.sectionNav) {
-      dom.sectionNav.classList.toggle("hidden", !isApp);
-    }
+    syncSidebarNavigationMode(isApp);
     dom.logoutBtn.classList.toggle("hidden", !isApp);
     if (dom.editProfileBtn) {
       dom.editProfileBtn.classList.toggle("hidden", !isApp);
     }
     dom.lockBtn.classList.toggle("hidden", !isApp || !hasPinConfigured());
     updateQuickAddVisibility();
+    if (isApp) {
+      syncAutoLockTimerState();
+    } else {
+      clearAutoLockInactivityTimer();
+    }
   }
 
   function hasPinConfigured() {
-    return Boolean(state.user && state.user.settings && state.user.settings.pinHash);
+    return Boolean(
+      state.user &&
+      (
+        (state.user.settings && state.user.settings.pinHash) ||
+        state.user.pinHash
+      )
+    );
   }
 
   function renderAll() {
@@ -538,6 +648,7 @@
     renderRecurringRules();
     renderInsights();
     renderCharts();
+    syncAutoLockTimerState();
   }
 
   function renderUserHeader() {
@@ -729,10 +840,9 @@
   function syncBodyModalState() {
     var hasAllTransactionsModal = dom.allTransactionsModal && !dom.allTransactionsModal.classList.contains("hidden");
     var hasRecordModal = dom.transactionRecordModal && !dom.transactionRecordModal.classList.contains("hidden");
-    var hasProfileModal = dom.profileModal && !dom.profileModal.classList.contains("hidden");
     var hasForgotPasswordModal = dom.forgotPasswordModal && !dom.forgotPasswordModal.classList.contains("hidden");
     var hasProtectedPromptModal = dom.protectedPromptModal && !dom.protectedPromptModal.classList.contains("hidden");
-    document.body.classList.toggle("modal-open", Boolean(hasAllTransactionsModal || hasRecordModal || hasProfileModal || hasForgotPasswordModal || hasProtectedPromptModal));
+    document.body.classList.toggle("modal-open", Boolean(hasAllTransactionsModal || hasRecordModal || hasForgotPasswordModal || hasProtectedPromptModal));
   }
 
   function handleTransactionRecordModalClick(event) {
@@ -765,16 +875,16 @@
     if (event.key !== "Escape") {
       return;
     }
+    if (dom.settingsPanel && !dom.settingsPanel.classList.contains("hidden")) {
+      closeSettingsPanel();
+      return;
+    }
     if (dom.protectedPromptModal && !dom.protectedPromptModal.classList.contains("hidden")) {
       closeProtectedPromptModal(null);
       return;
     }
     if (dom.forgotPasswordModal && !dom.forgotPasswordModal.classList.contains("hidden")) {
       closeForgotPasswordModal();
-      return;
-    }
-    if (dom.profileModal && !dom.profileModal.classList.contains("hidden")) {
-      closeProfileModal();
       return;
     }
     if (dom.transactionRecordModal && !dom.transactionRecordModal.classList.contains("hidden")) {
@@ -866,55 +976,206 @@
     syncBodyModalState();
   }
 
-  function handleProfileModalClick(event) {
+  function handleSettingsSidebarNavClick(event) {
     var actionButton = event.target.closest("[data-action]");
-    if (!actionButton || !dom.profileModal || !dom.profileModal.contains(actionButton)) {
+    if (actionButton && actionButton.getAttribute("data-action") === "close-settings-mode") {
+      closeSettingsPanel();
       return;
     }
-    if (actionButton.getAttribute("data-action") === "close-profile-modal") {
-      closeProfileModal();
+    var navButton = event.target.closest("[data-settings-nav]");
+    if (!navButton || !dom.settingsSidebarNav || !dom.settingsSidebarNav.contains(navButton)) {
+      return;
+    }
+    setSettingsSection(navButton.getAttribute("data-settings-nav"));
+  }
+
+  function handleSettingsWorkspaceClick(event) {
+    var actionButton = event.target.closest("[data-action]");
+    if (!actionButton || !dom.settingsPanel || !dom.settingsPanel.contains(actionButton)) {
+      return;
+    }
+    if (actionButton.getAttribute("data-action") === "close-settings-mode") {
+      closeSettingsPanel();
     }
   }
 
-  function openProfileModal() {
-    if (!state.user || !dom.profileModal || !dom.profileForm) {
+  function openSettingsPanel(sectionName) {
+    if (!state.user || !dom.settingsPanel) {
+      return;
+    }
+
+    if (!state.isSettingsMode) {
+      state.lastAppSection = state.activeSection || "overview";
+    }
+    state.isSettingsMode = true;
+    closeAllTransactionsModal();
+    closeTransactionRecord();
+    dom.settingsPanel.classList.remove("hidden");
+    dom.settingsPanel.setAttribute("aria-hidden", "false");
+    dom.settingsPanel.scrollTop = 0;
+    (dom.appSections || []).forEach(function (section) {
+      section.classList.add("section-hidden");
+    });
+    hydrateSettingsProfileForm();
+    hydrateAutoLockSettingsForm();
+    setSettingsSection(sectionName || state.activeSettingsSection || "profile");
+    syncSidebarNavigationMode(true);
+    updateQuickAddVisibility();
+
+    requestAnimationFrame(function () {
+      focusActiveSettingsField();
+    });
+  }
+
+  function closeSettingsPanel() {
+    if (!dom.settingsPanel) {
+      return;
+    }
+    var wasSettingsMode = state.isSettingsMode;
+    state.isSettingsMode = false;
+    dom.settingsPanel.classList.add("hidden");
+    dom.settingsPanel.setAttribute("aria-hidden", "true");
+    if (dom.changePasswordForm) {
+      dom.changePasswordForm.reset();
+    }
+    if (dom.changePinForm) {
+      dom.changePinForm.reset();
+    }
+    setProfileFormMessage("", false);
+    setChangePasswordMessage("", false);
+    setChangePinMessage("", false);
+    setAutoLockMessage("", false);
+    syncSidebarNavigationMode(Boolean(dom.appView && !dom.appView.classList.contains("hidden")));
+    if (wasSettingsMode && dom.appView && !dom.appView.classList.contains("hidden")) {
+      setActiveSection(state.lastAppSection || state.activeSection || "overview");
+    }
+  }
+
+  function setSettingsSection(sectionName) {
+    var nextSection = String(sectionName || "profile");
+    var hasMatch = false;
+    (dom.settingsSectionPanels || []).forEach(function (panel) {
+      var panelKey = panel.getAttribute("data-settings-panel");
+      var isActive = panelKey === nextSection;
+      if (isActive) {
+        hasMatch = true;
+      }
+      panel.classList.toggle("hidden", !isActive);
+    });
+    if (!hasMatch) {
+      nextSection = "profile";
+      (dom.settingsSectionPanels || []).forEach(function (panel) {
+        panel.classList.toggle("hidden", panel.getAttribute("data-settings-panel") !== "profile");
+      });
+    }
+    state.activeSettingsSection = nextSection;
+    (dom.settingsNavButtons || []).forEach(function (button) {
+      var isActive = button.getAttribute("data-settings-nav") === nextSection;
+      button.classList.toggle("active", isActive);
+      if (isActive) {
+        button.setAttribute("aria-current", "page");
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    });
+  }
+
+  function focusActiveSettingsField() {
+    if (!dom.settingsPanel || dom.settingsPanel.classList.contains("hidden")) {
+      return;
+    }
+    var activeSection = (dom.settingsNavButtons || []).find(function (button) {
+      return button.classList.contains("active");
+    });
+    var sectionName = activeSection ? activeSection.getAttribute("data-settings-nav") : "profile";
+
+    if (sectionName === "password" && dom.currentPasswordInput) {
+      dom.currentPasswordInput.focus();
+      return;
+    }
+    if (sectionName === "pin" && dom.newPinInput) {
+      dom.newPinInput.focus();
+      return;
+    }
+    if (sectionName === "autolock" && dom.autoLockEnabledInput) {
+      dom.autoLockEnabledInput.focus();
+      return;
+    }
+    if (dom.profileNameInput) {
+      dom.profileNameInput.focus();
+      if (dom.profileNameInput.value) {
+        dom.profileNameInput.select();
+      }
+    }
+  }
+
+  function hydrateSettingsProfileForm() {
+    if (!state.user || !dom.profileForm) {
       return;
     }
     dom.profileNameInput.value = String(state.user.profileName || "").trim();
     dom.profileEmailInput.value = String(state.user.email || "").trim();
     setProfileFormMessage("", false);
-    setChangePasswordMessage("", false);
-    if (dom.changePasswordForm) {
-      dom.changePasswordForm.reset();
+  }
+
+  function hydrateAutoLockSettingsForm() {
+    if (!dom.autoLockEnabledInput || !dom.autoLockMinutesInput || !state.user) {
+      return;
     }
+    var settings = state.user.settings || {};
+    var enabled = Boolean(settings.autoLockEnabled);
+    var minutes = getAutoLockMinutes(settings);
+    dom.autoLockEnabledInput.checked = enabled;
+    dom.autoLockMinutesInput.value = String(minutes);
+    dom.autoLockMinutesInput.disabled = !enabled;
+    setAutoLockMessage("", false);
+  }
 
-    dom.profileModal.classList.remove("hidden");
-    dom.profileModal.setAttribute("aria-hidden", "false");
-    syncBodyModalState();
+  function handleAutoLockToggleChange() {
+    if (!dom.autoLockEnabledInput || !dom.autoLockMinutesInput) {
+      return;
+    }
+    dom.autoLockMinutesInput.disabled = !dom.autoLockEnabledInput.checked;
+  }
 
-    requestAnimationFrame(function () {
-      dom.profileNameInput.focus();
-      if (dom.profileNameInput.value) {
-        dom.profileNameInput.select();
-      }
-    });
+  function openProfileModal() {
+    openSettingsPanel("profile");
   }
 
   function closeProfileModal() {
-    if (!dom.profileModal) {
-      return;
-    }
-    dom.profileModal.classList.add("hidden");
-    dom.profileModal.setAttribute("aria-hidden", "true");
-    if (dom.profileForm) {
-      dom.profileForm.reset();
-    }
-    setProfileFormMessage("", false);
-    setChangePasswordMessage("", false);
+    closeSettingsPanel();
+  }
+
+  function openChangePasswordModal() {
     if (dom.changePasswordForm) {
       dom.changePasswordForm.reset();
     }
-    syncBodyModalState();
+    setChangePasswordMessage("", false);
+    openSettingsPanel("password");
+  }
+
+  function closeChangePasswordModal() {
+    if (dom.changePasswordForm) {
+      dom.changePasswordForm.reset();
+    }
+    setChangePasswordMessage("", false);
+    closeSettingsPanel();
+  }
+
+  function openPinSettingsModal() {
+    if (dom.changePinForm) {
+      dom.changePinForm.reset();
+    }
+    setChangePinMessage("", false);
+    openSettingsPanel("pin");
+  }
+
+  function closePinSettingsModal() {
+    if (dom.changePinForm) {
+      dom.changePinForm.reset();
+    }
+    setChangePinMessage("", false);
+    closeSettingsPanel();
   }
 
   function handleProfileFormSubmit(event) {
@@ -949,8 +1210,7 @@
 
       state.user = window.AuthService.getCurrentUser();
       renderUserHeader();
-      closeProfileModal();
-      setAppMessage("Profile updated successfully.", false);
+      setProfileFormMessage("Profile updated successfully.", false);
     } catch (error) {
       setProfileFormMessage(error.message, true);
     }
@@ -998,7 +1258,6 @@
       });
       dom.changePasswordForm.reset();
       setChangePasswordMessage("Password changed successfully.", false);
-      setAppMessage("Password changed successfully.", false);
     } catch (error) {
       setChangePasswordMessage(error.message || "Could not change password.", true);
     }
@@ -1010,6 +1269,155 @@
     }
     dom.changePasswordMessage.textContent = message || "";
     dom.changePasswordMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
+  }
+
+  async function handleChangePinFormSubmit(event) {
+    event.preventDefault();
+    if (!state.user) {
+      return;
+    }
+
+    var newPin = String(dom.newPinInput ? dom.newPinInput.value : "").trim();
+    var confirmPin = String(dom.confirmPinInput ? dom.confirmPinInput.value : "").trim();
+
+    if (!newPin) {
+      setChangePinMessage("PIN is required.", true);
+      return;
+    }
+    if (!/^\d{4,6}$/.test(newPin)) {
+      setChangePinMessage("PIN must be 4 to 6 digits.", true);
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setChangePinMessage("PIN and confirm PIN do not match.", true);
+      return;
+    }
+
+    try {
+      window.AuthService.setPin(newPin);
+      state.user = window.AuthService.getCurrentUser();
+      renderUserHeader();
+      syncAutoLockTimerState();
+      if (dom.changePinForm) {
+        dom.changePinForm.reset();
+      }
+      setChangePinMessage("PIN updated successfully.", false);
+    } catch (error) {
+      setChangePinMessage(error.message || "Could not update PIN.", true);
+    }
+  }
+
+  function setChangePinMessage(message, isError) {
+    if (!dom.changePinMessage) {
+      return;
+    }
+    dom.changePinMessage.textContent = message || "";
+    dom.changePinMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
+  }
+
+  function handleAutoLockFormSubmit(event) {
+    event.preventDefault();
+    if (!state.user || !dom.autoLockEnabledInput || !dom.autoLockMinutesInput) {
+      return;
+    }
+
+    var isEnabled = Boolean(dom.autoLockEnabledInput.checked);
+    var minutes = parseInt(dom.autoLockMinutesInput.value, 10);
+
+    if (isEnabled && !hasPinConfigured()) {
+      setAutoLockMessage("Set a PIN first to use inactivity auto lock.", true);
+      setSettingsSection("pin");
+      return;
+    }
+    if (isEnabled && (!Number.isFinite(minutes) || minutes < 1)) {
+      setAutoLockMessage("Select a valid auto lock time.", true);
+      return;
+    }
+
+    try {
+      updateUser(function (user) {
+        user.settings = user.settings || {};
+        user.settings.autoLockEnabled = isEnabled;
+        user.settings.autoLockMinutes = Number.isFinite(minutes) && minutes > 0 ? minutes : 5;
+        user.updatedAt = new Date().toISOString();
+        return user;
+      }, false);
+
+      state.user = window.AuthService.getCurrentUser();
+      hydrateAutoLockSettingsForm();
+      syncAutoLockTimerState();
+      if (isEnabled) {
+        setAutoLockMessage("Auto lock is enabled and will require PIN unlock.", false);
+      } else {
+        setAutoLockMessage("Auto lock is disabled.", false);
+      }
+    } catch (error) {
+      setAutoLockMessage(error.message || "Could not update auto lock settings.", true);
+    }
+  }
+
+  function setAutoLockMessage(message, isError) {
+    if (!dom.autoLockMessage) {
+      return;
+    }
+    dom.autoLockMessage.textContent = message || "";
+    dom.autoLockMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
+  }
+
+  function getAutoLockMinutes(settings) {
+    var value = parseInt(settings && settings.autoLockMinutes, 10);
+    if (!Number.isFinite(value) || value < 1) {
+      return 5;
+    }
+    return value;
+  }
+
+  function isAutoLockEnabled(user) {
+    return Boolean(
+      user &&
+      user.settings &&
+      user.settings.autoLockEnabled &&
+      hasPinConfigured() &&
+      dom.appView &&
+      !dom.appView.classList.contains("hidden")
+    );
+  }
+
+  function clearAutoLockInactivityTimer() {
+    if (inactivityLockTimerId) {
+      clearTimeout(inactivityLockTimerId);
+      inactivityLockTimerId = null;
+    }
+  }
+
+  function syncAutoLockTimerState() {
+    clearAutoLockInactivityTimer();
+    if (!isAutoLockEnabled(state.user)) {
+      return;
+    }
+    inactivityLockTimerId = setTimeout(function () {
+      clearAutoLockInactivityTimer();
+      if (!isAutoLockEnabled(state.user)) {
+        return;
+      }
+      try {
+        window.AuthService.lockSession();
+        showView("pin");
+        if (dom.pinUnlockForm) {
+          dom.pinUnlockForm.reset();
+        }
+        if (dom.pinMessage) {
+          dom.pinMessage.textContent = "App locked due to inactivity. Enter PIN to continue.";
+          dom.pinMessage.style.color = "var(--muted)";
+        }
+      } catch (error) {
+        return;
+      }
+    }, getAutoLockMinutes(state.user && state.user.settings) * 60 * 1000);
+  }
+
+  function handleAutoLockActivity() {
+    syncAutoLockTimerState();
   }
 
   function openForgotPasswordModal() {
@@ -1193,15 +1601,34 @@
     var config = options || {};
     dom.protectedPromptTitle.textContent = config.title || "Enter Password";
     dom.protectedPromptMessage.textContent = config.message || "Enter password to continue.";
+    if (dom.protectedPromptLabel) {
+      dom.protectedPromptLabel.textContent = config.label || "Password";
+    }
     dom.protectedPromptInput.value = config.defaultValue || "";
     dom.protectedPromptInput.placeholder = config.placeholder || "";
+    dom.protectedPromptInput.type = config.inputType || "password";
+    if (config.inputMode) {
+      dom.protectedPromptInput.setAttribute("inputmode", config.inputMode);
+    } else {
+      dom.protectedPromptInput.removeAttribute("inputmode");
+    }
+    if (typeof config.minLength === "number") {
+      dom.protectedPromptInput.minLength = config.minLength;
+    } else {
+      dom.protectedPromptInput.removeAttribute("minlength");
+    }
+    if (typeof config.maxLength === "number") {
+      dom.protectedPromptInput.maxLength = config.maxLength;
+    } else {
+      dom.protectedPromptInput.removeAttribute("maxlength");
+    }
     dom.protectedPromptInput.autocomplete = config.autocomplete || "off";
     dom.protectedPromptInput.required = true;
     if (dom.protectedPromptOkBtn) {
       dom.protectedPromptOkBtn.textContent = config.confirmLabel || "OK";
     }
     if (dom.protectedPromptError) {
-      dom.protectedPromptError.textContent = "";
+      dom.protectedPromptError.textContent = config.errorText || "";
     }
 
     dom.protectedPromptModal.classList.remove("hidden");
@@ -2668,7 +3095,7 @@
   function backupUserData() {
     var payload = {
       exportedAt: new Date().toISOString(),
-      app: "Finance Tracker Pro",
+      app: "NexSpend",
       data: state.user
     };
     downloadFile("finance_backup_" + toDateInputValue(new Date()) + ".json", JSON.stringify(payload, null, 2), "application/json");

@@ -1,4 +1,4 @@
-# Finance Tracker Pro
+# NexSpendFinance
 
 A browser-based finance tracker with authentication, dashboards, insights, budgeting, reminders, and exports.
 

@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Finance Tracker Pro</title>
+  <title>NexSpend</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./css/styles.css">
+  <link rel="stylesheet" href="./css/styles.css?v=20260406-settings-mode3">
 </head>
 <body>
 
@@ -27,14 +27,17 @@
         <div class="auth-brand">
           <div class="auth-logo-ring">
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-              <path d="M14 2.5L25 8.5V19.5L14 25.5L3 19.5V8.5L14 2.5Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
-              <circle cx="14" cy="14" r="3.5" fill="currentColor" opacity="0.7"/>
-              <path d="M14 5.5V22.5M5 10.5L23 17.5M23 10.5L5 17.5" stroke="currentColor" stroke-width="0.75" opacity="0.4"/>
+              <circle cx="14" cy="14" r="5.4" fill="currentColor" opacity="0.22"/>
+              <circle cx="14" cy="14" r="4.1" fill="currentColor" opacity="0.9"/>
+              <path d="M8.1 10.8C9.5 7.8 13.4 6.4 16.4 7.6C18.7 8.5 20.2 10.8 20.2 13.3" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>
+              <path d="M9.5 17.2C10.8 19.4 13.6 20.6 16 20" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" opacity="0.75"/>
+              <circle cx="7.1" cy="10.9" r="1.6" fill="currentColor"/>
+              <circle cx="20.7" cy="13.5" r="1.35" fill="currentColor"/>
             </svg>
           </div>
           <div>
-            <h1 class="auth-brand-name">Finance<span class="text-accent">Pro</span></h1>
-            <p class="auth-brand-sub">Your wealth, beautifully organised.</p>
+            <h1 class="auth-brand-name"><span class="brand-word-base">Nex</span><span class="brand-word-accent">Spend</span></h1>
+            <p class="auth-brand-sub">Smart spending</p>
           </div>
         </div>
 
@@ -142,14 +145,17 @@
         <div class="sidebar-brand">
           <div class="sidebar-logo-icon">
             <svg width="20" height="20" viewBox="0 0 28 28" fill="none">
-              <path d="M14 2.5L25 8.5V19.5L14 25.5L3 19.5V8.5L14 2.5Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
-              <circle cx="14" cy="14" r="3" fill="currentColor" opacity="0.8"/>
-              <path d="M14 5.5V22.5M5 10.5L23 17.5M23 10.5L5 17.5" stroke="currentColor" stroke-width="0.7" opacity="0.35"/>
+              <circle cx="14" cy="14" r="4.8" fill="currentColor" opacity="0.22"/>
+              <circle cx="14" cy="14" r="3.7" fill="currentColor" opacity="0.92"/>
+              <path d="M8.3 11.1C9.6 8.4 12.9 7.1 15.7 8.1C17.9 8.9 19.4 11.1 19.4 13.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M10 17C11.3 18.8 13.7 19.7 15.9 19.1" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.75"/>
+              <circle cx="7.3" cy="11.2" r="1.45" fill="currentColor"/>
+              <circle cx="20" cy="13.6" r="1.2" fill="currentColor"/>
             </svg>
           </div>
           <div class="sidebar-brand-text">
-            <span class="sidebar-brand-name">Finance<strong>Pro</strong></span>
-            <span class="sidebar-brand-tag">Workspace</span>
+            <span class="sidebar-brand-name"><span class="brand-word-base">Nex</span><span class="brand-word-accent">Spend</span></span>
+            <span class="sidebar-brand-tag">Smart Spending</span>
           </div>
         </div>
 
@@ -206,20 +212,39 @@
             <span class="nav-icon">
               <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 14v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3"/><polyline points="7,9 10,12 13,9"/><line x1="10" y1="3" x2="10" y2="12"/></svg>
             </span>
-            <span>Export</span>
+            <span>Data Vault</span>
+          </button>
+        </nav>
+
+        <nav id="settingsSidebarNav" class="sidebar-nav hidden" aria-label="Settings sections">
+          <div class="nav-section-label">Settings</div>
+          <button class="section-nav-btn settings-side-btn active" type="button" data-settings-nav="profile">
+            <span>Name & Email</span>
+          </button>
+          <button class="section-nav-btn settings-side-btn" type="button" data-settings-nav="pin">
+            <span>PIN</span>
+          </button>
+          <button class="section-nav-btn settings-side-btn" type="button" data-settings-nav="password">
+            <span>Password</span>
+          </button>
+          <button class="section-nav-btn settings-side-btn" type="button" data-settings-nav="autolock">
+            <span>Auto Lock</span>
+          </button>
+          <button class="section-nav-btn settings-side-btn settings-side-back" type="button" data-action="close-settings-mode">
+            <span>Back to Dashboard</span>
           </button>
         </nav>
 
         <!-- sidebar footer -->
         <div class="sidebar-footer">
           <div class="sidebar-user" id="sidebarUser">
-            <button id="editProfileBtn" class="sidebar-profile-btn hidden" type="button" title="Edit profile">
+            <button id="editProfileBtn" class="sidebar-profile-btn hidden" type="button" title="Open settings">
               <div class="sidebar-avatar" id="userAvatar">--</div>
               <div class="sidebar-user-meta">
                 <span id="userNameBadge" class="sidebar-name">Profile</span>
                 <span id="userBadge" class="sidebar-email">user@example.com</span>
               </div>
-              <span class="sidebar-profile-edit-text">Edit</span>
+              <span class="sidebar-profile-edit-text">Settings</span>
             </button>
           </div>
           <div class="sidebar-controls">
@@ -251,7 +276,7 @@
           <span></span><span></span><span></span>
         </button>
         <div class="mobile-brand">
-          Finance<strong>Pro</strong>
+          <span class="brand-word-base">Nex</span><span class="brand-word-accent">Spend</span>
         </div>
         <div class="mobile-topbar-right">
           <button id="themeToggleMobile" class="btn btn-icon" type="button" title="Toggle theme" style="display:none">
@@ -261,6 +286,100 @@
       </header>
 
       <div class="page-content">
+
+        <section id="settingsWorkspace" class="settings-workspace hidden" aria-hidden="true">
+          <header class="settings-workspace-head">
+            <div>
+              <p class="overview-kicker">Account</p>
+              <h2 class="overview-title">Settings</h2>
+              <p class="overview-subtitle">Change profile details, PIN, password, and inactivity lock.</p>
+            </div>
+            <button class="btn btn-ghost" type="button" data-action="close-settings-mode">Close</button>
+          </header>
+
+          <div class="settings-workspace-body">
+            <section class="settings-section" data-settings-panel="profile">
+              <form id="profileForm" class="profile-form">
+                <div class="field">
+                  <label for="profileNameInput">Display Name</label>
+                  <input id="profileNameInput" type="text" maxlength="60" placeholder="Enter your name">
+                </div>
+                <div class="field">
+                  <label for="profileEmailInput">Email</label>
+                  <input id="profileEmailInput" type="email" required placeholder="you@example.com" autocomplete="email">
+                </div>
+                <p id="profileFormMessage" class="status-text profile-form-message"></p>
+                <div class="record-actions">
+                  <button id="saveProfileBtn" class="btn btn-primary" type="submit">Save Profile</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="settings-section hidden" data-settings-panel="pin">
+              <form id="changePinForm" class="profile-form">
+                <div class="field">
+                  <label for="newPinInput">New PIN</label>
+                  <input id="newPinInput" type="password" minlength="4" maxlength="6" inputmode="numeric" autocomplete="off" placeholder="Enter 4 to 6 digits" required>
+                </div>
+                <div class="field">
+                  <label for="confirmPinInput">Confirm PIN</label>
+                  <input id="confirmPinInput" type="password" minlength="4" maxlength="6" inputmode="numeric" autocomplete="off" placeholder="Re-enter PIN" required>
+                </div>
+                <p id="changePinMessage" class="status-text profile-form-message"></p>
+                <div class="record-actions">
+                  <button id="savePinBtn" class="btn btn-primary" type="submit">Save PIN</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="settings-section hidden" data-settings-panel="password">
+              <form id="changePasswordForm" class="profile-form profile-password-form">
+                <div class="field">
+                  <label for="currentPasswordInput">Current Password</label>
+                  <input id="currentPasswordInput" type="password" minlength="6" autocomplete="current-password" placeholder="Enter current password" required>
+                </div>
+                <div class="field">
+                  <label for="newPasswordInput">New Password</label>
+                  <input id="newPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Min. 6 characters" required>
+                </div>
+                <div class="field">
+                  <label for="confirmPasswordInput">Confirm New Password</label>
+                  <input id="confirmPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Re-enter new password" required>
+                </div>
+                <p id="changePasswordMessage" class="status-text profile-form-message"></p>
+                <div class="record-actions">
+                  <button id="changePasswordBtn" class="btn btn-primary" type="submit">Save Password</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="settings-section hidden" data-settings-panel="autolock">
+              <form id="autoLockForm" class="profile-form">
+                <p class="profile-subtitle">Inactivity Auto Lock</p>
+                <p class="profile-security-copy">Lock the app automatically after inactivity. Unlock will require your PIN.</p>
+                <label class="settings-toggle-row" for="autoLockEnabledInput">
+                  <span>Enable Auto Lock</span>
+                  <input id="autoLockEnabledInput" type="checkbox">
+                </label>
+                <div class="field">
+                  <label for="autoLockMinutesInput">Lock After</label>
+                  <select id="autoLockMinutesInput">
+                    <option value="1">1 minute</option>
+                    <option value="2">2 minutes</option>
+                    <option value="5">5 minutes</option>
+                    <option value="10">10 minutes</option>
+                    <option value="15">15 minutes</option>
+                    <option value="30">30 minutes</option>
+                  </select>
+                </div>
+                <p id="autoLockMessage" class="status-text profile-form-message"></p>
+                <div class="record-actions">
+                  <button id="saveAutoLockBtn" class="btn btn-primary" type="submit">Save Auto Lock</button>
+                </div>
+              </form>
+            </section>
+          </div>
+        </section>
 
         <!-- ── STATS GRID ──────────────────────────────────────────── -->
         <div class="stats-grid app-view-section" data-app-section="overview">
@@ -707,67 +826,124 @@
 
         <!-- ── EXPORT ─────────────────────────────────────────────── -->
         <section class="glass-panel export-panel app-view-section" data-app-section="export">
-          <div class="panel-head">
+          <div class="panel-head export-head">
             <div class="panel-head-left">
               <div class="panel-head-icon">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </div>
-              <h2>Export & Backup</h2>
+              <div class="export-head-copy">
+                <p class="export-kicker">Data Center</p>
+                <h2>Data Vault</h2>
+                <p class="export-head-sub">Move your data safely across CSV, PDF, and JSON with encrypted export options.</p>
+              </div>
+            </div>
+            <div class="export-head-chips">
+              <span class="chip export-chip">Encrypted</span>
+              <span class="chip export-chip">Statement Ready</span>
             </div>
           </div>
-          <div class="export-grid">
-            <button id="exportCsvBtn" class="export-btn" type="button">
-              <div class="export-btn-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+
+          <div class="export-hero">
+            <div class="export-hero-copy">
+              <h3>Keep Your Finance Data Portable</h3>
+              <p>Create secure backups, import bank statements, and restore your full workspace in minutes.</p>
+            </div>
+            <div class="export-hero-points">
+              <span>CSV + PDF + JSON</span>
+              <span>Password-protected exports</span>
+              <span>PhonePe statement support</span>
+            </div>
+          </div>
+
+          <div class="export-layout">
+            <div class="export-actions">
+              <article class="export-group">
+                <div class="export-group-head">
+                  <h3>Export Files</h3>
+                  <p>Download and share your transaction data securely.</p>
+                </div>
+                <div class="export-grid">
+                  <button id="exportCsvBtn" class="export-btn" type="button">
+                    <div class="export-btn-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    </div>
+                    <span class="export-btn-label">CSV Export</span>
+                    <span class="export-btn-sub">Password-protected sheet</span>
+                  </button>
+
+                  <button id="exportTransactionsPdfBtn" class="export-btn" type="button">
+                    <div class="export-btn-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><path d="M8 14h8"/><path d="M8 18h8"/><path d="M8 10h4"/></svg>
+                    </div>
+                    <span class="export-btn-label">PDF Export</span>
+                    <span class="export-btn-sub">Detailed transactions</span>
+                  </button>
+
+                  <button id="exportPdfBtn" class="export-btn" type="button">
+                    <div class="export-btn-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><path d="M10.5 13.5h.5a1 1 0 0 1 0 2h-.5v1.5"/><path d="M14 13.5v4.5"/><path d="M8 13.5v4.5h2a1.5 1.5 0 1 0 0-3H8"/></svg>
+                    </div>
+                    <span class="export-btn-label">PDF Summary</span>
+                    <span class="export-btn-sub">Monthly report format</span>
+                  </button>
+
+                  <button id="backupBtn" class="export-btn" type="button">
+                    <div class="export-btn-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    </div>
+                    <span class="export-btn-label">Backup JSON</span>
+                    <span class="export-btn-sub">Full workspace backup</span>
+                  </button>
+                </div>
+              </article>
+
+              <article class="export-group">
+                <div class="export-group-head">
+                  <h3>Import Files</h3>
+                  <p>Restore your data or parse statements from your apps.</p>
+                </div>
+                <div class="export-grid export-grid-compact">
+                  <label class="export-btn">
+                    <div class="export-btn-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <span class="export-btn-label">Import CSV</span>
+                    <span class="export-btn-sub">Bank/account statement</span>
+                    <input id="importTransactionsInput" type="file" accept=".csv,text/csv">
+                  </label>
+
+                  <label class="export-btn">
+                    <div class="export-btn-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><path d="M12 11v6"/><path d="M9 14h6"/></svg>
+                    </div>
+                    <span class="export-btn-label">Import PDF</span>
+                    <span class="export-btn-sub">PhonePe and UPI statements</span>
+                    <input id="importPdfInput" type="file" accept="application/pdf,.pdf">
+                  </label>
+
+                  <label class="export-btn">
+                    <div class="export-btn-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <span class="export-btn-label">Restore JSON</span>
+                    <span class="export-btn-sub">Import previous backup</span>
+                    <input id="restoreInput" type="file" accept="application/json">
+                  </label>
+                </div>
+              </article>
+            </div>
+
+            <aside class="export-aside">
+              <h3>Quick Checklist</h3>
+              <ul class="export-aside-list">
+                <li>Use a strong password for exports.</li>
+                <li>For locked PDFs, enter statement password when prompted.</li>
+                <li>Keep one JSON backup before bulk imports.</li>
+              </ul>
+              <div class="export-aside-note">
+                <strong>Tip:</strong> If parsing misses entries, try PDF summary export from your bank app.
               </div>
-              <span class="export-btn-label">CSV Export</span>
-              <span class="export-btn-sub">Password-protected</span>
-            </button>
-            <label class="export-btn" type="button">
-              <div class="export-btn-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              </div>
-              <span class="export-btn-label">Import CSV</span>
-              <span class="export-btn-sub">Bank/account statement</span>
-              <input id="importTransactionsInput" type="file" accept=".csv,text/csv" style="display:none">
-            </label>
-            <button id="exportTransactionsPdfBtn" class="export-btn" type="button">
-              <div class="export-btn-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><path d="M8 14h8"/><path d="M8 18h8"/><path d="M8 10h4"/></svg>
-              </div>
-              <span class="export-btn-label">PDF Export</span>
-              <span class="export-btn-sub">Protected transactions</span>
-            </button>
-            <button id="exportPdfBtn" class="export-btn" type="button">
-              <div class="export-btn-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><path d="M10.5 13.5h.5a1 1 0 0 1 0 2h-.5v1.5"/><path d="M14 13.5v4.5"/><path d="M8 13.5v4.5h2a1.5 1.5 0 1 0 0-3H8"/></svg>
-              </div>
-              <span class="export-btn-label">PDF Summary</span>
-              <span class="export-btn-sub">Protected monthly report</span>
-            </button>
-            <label class="export-btn" type="button">
-              <div class="export-btn-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><path d="M12 11v6"/><path d="M9 14h6"/></svg>
-              </div>
-              <span class="export-btn-label">Import PDF</span>
-              <span class="export-btn-sub">Statement parsing</span>
-              <input id="importPdfInput" type="file" accept="application/pdf,.pdf" style="display:none">
-            </label>
-            <button id="backupBtn" class="export-btn" type="button">
-              <div class="export-btn-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              </div>
-              <span class="export-btn-label">Backup JSON</span>
-              <span class="export-btn-sub">Full data export</span>
-            </button>
-            <label class="export-btn" type="button">
-              <div class="export-btn-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              </div>
-              <span class="export-btn-label">Restore JSON</span>
-              <span class="export-btn-sub">Import backup</span>
-              <input id="restoreInput" type="file" accept="application/json" style="display:none">
-            </label>
+            </aside>
           </div>
           <p id="exportMessage" class="status-text"></p>
         </section>
@@ -847,60 +1023,6 @@
   </div>
 
   <!-- ─── SCRIPTS ───────────────────────────────────────────────────────────── -->
-  <!-- Profile Modal -->
-  <div id="profileModal" class="record-modal hidden" aria-hidden="true">
-    <button class="record-modal-backdrop" type="button" data-action="close-profile-modal" aria-label="Close profile"></button>
-    <section class="record-modal-card profile-modal-card" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
-      <div class="record-modal-head">
-        <div class="record-modal-heading">
-          <p class="record-modal-kicker">Account</p>
-          <h3 id="profileModalTitle" class="record-modal-title">Edit Profile</h3>
-          <p class="record-modal-meta">Update your public name and login email.</p>
-        </div>
-        <button class="record-modal-close" type="button" data-action="close-profile-modal" aria-label="Close">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-
-      <form id="profileForm" class="profile-form">
-        <div class="field">
-          <label for="profileNameInput">Display Name</label>
-          <input id="profileNameInput" type="text" maxlength="60" placeholder="Enter your name">
-        </div>
-        <div class="field">
-          <label for="profileEmailInput">Email</label>
-          <input id="profileEmailInput" type="email" required placeholder="you@example.com" autocomplete="email">
-        </div>
-        <p id="profileFormMessage" class="status-text profile-form-message"></p>
-        <div class="record-actions">
-          <button class="btn btn-ghost" type="button" data-action="close-profile-modal">Cancel</button>
-          <button id="saveProfileBtn" class="btn btn-primary" type="submit">Save Profile</button>
-        </div>
-      </form>
-
-      <div class="profile-section-divider"></div>
-
-      <form id="changePasswordForm" class="profile-form profile-password-form">
-        <p class="profile-subtitle">Change Password</p>
-        <div class="field">
-          <label for="currentPasswordInput">Current Password</label>
-          <input id="currentPasswordInput" type="password" minlength="6" autocomplete="current-password" placeholder="Enter current password" required>
-        </div>
-        <div class="field">
-          <label for="newPasswordInput">New Password</label>
-          <input id="newPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Min. 6 characters" required>
-        </div>
-        <div class="field">
-          <label for="confirmPasswordInput">Confirm New Password</label>
-          <input id="confirmPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Re-enter new password" required>
-        </div>
-        <p id="changePasswordMessage" class="status-text profile-form-message"></p>
-        <div class="record-actions">
-          <button id="changePasswordBtn" class="btn btn-primary" type="submit">Change Password</button>
-        </div>
-      </form>
-    </section>
-  </div>
   <!-- Forgot Password Modal -->
   <div id="forgotPasswordModal" class="record-modal hidden" aria-hidden="true">
     <button class="record-modal-backdrop" type="button" data-action="close-forgot-password-modal" aria-label="Close forgot password"></button>
@@ -966,7 +1088,7 @@
         </p>
       </div>
       <form id="protectedPromptForm" class="protected-prompt-form">
-        <label for="protectedPromptInput" class="protected-prompt-label">Password</label>
+        <label id="protectedPromptLabel" for="protectedPromptInput" class="protected-prompt-label">Password</label>
         <input
           id="protectedPromptInput"
           class="protected-prompt-input"
@@ -992,10 +1114,10 @@
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script src="./js/storage.js"></script>
-  <script src="./js/auth.js"></script>
-  <script src="./js/charts.js"></script>
-  <script src="./js/app.js"></script>
+  <script src="./js/storage.js?v=20260406-settings-mode3"></script>
+  <script src="./js/auth.js?v=20260406-settings-mode3"></script>
+  <script src="./js/charts.js?v=20260406-settings-mode3"></script>
+  <script src="./js/app.js?v=20260406-settings-mode3"></script>
 
   <!-- Mobile sidebar toggle -->
   <script>
@@ -1025,4 +1147,3 @@
   </script>
 </body>
 </html>
-

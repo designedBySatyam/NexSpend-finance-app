@@ -1629,7 +1629,7 @@ app.post("/api/reports/export/summary/pdf", function (req, res) {
   res.setHeader("Content-Disposition", 'attachment; filename="finance_summary_' + month + '.pdf"');
   doc.pipe(res);
 
-  doc.fontSize(16).fillColor("#111").text("Finance Tracker Summary");
+  doc.fontSize(16).fillColor("#111").text("NexSpendFinance Summary");
   doc.moveDown(0.6);
   doc.fontSize(10).fillColor("#555");
   doc.text("Month: " + month);
@@ -1669,7 +1669,7 @@ app.post("/api/transactions/export/pdf", function (req, res) {
     return;
   }
 
-  const title = String((req.body && req.body.title) || "NexSpend Transactions Export");
+  const title = String((req.body && req.body.title) || "NexSpendFinance Transactions Export");
   const currency = String((req.body && req.body.currency) || "INR");
 
   const doc = new PDFDocument(buildPdfDocOptions(passwordResult.value));
