@@ -335,6 +335,12 @@ h1, h2, h3, h4 {
 }
 .pin-heading { font-size: 1.4rem; text-align: center; margin-bottom: 0.35rem; }
 .pin-sub { color: var(--muted); font-size: 0.88rem; text-align: center; margin-bottom: 1rem; }
+.pin-lock-hint {
+  text-align: center;
+  margin-top: 0.2rem;
+  min-height: 1rem;
+  font-size: 0.78rem;
+}
 
 /* ─── APP LAYOUT ─────────────────────────────────────────────────────────────── */
 .app-layout {
@@ -685,6 +691,23 @@ body.modal-open { overflow: hidden; }
   height: 18px;
   accent-color: var(--accent);
   cursor: pointer;
+}
+.auto-lock-live-row {
+  border: 1px dashed rgba(16,185,129,0.3);
+  border-radius: 11px;
+  padding: 0.6rem 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.auto-lock-live-row strong {
+  color: var(--text);
+  font-weight: 700;
+}
+[data-theme="light"] .auto-lock-live-row {
+  border-color: rgba(16,185,129,0.32);
+  background: rgba(16,185,129,0.06);
 }
 
 .protected-prompt-modal {
@@ -2817,6 +2840,14 @@ tbody tr:last-child td { border-bottom: none; }
   }
   .settings-workspace .record-actions .btn {
     width: 100%;
+  }
+  .auto-lock-live-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .auto-lock-live-row .btn {
+    width: 100%;
+    justify-content: center;
   }
   .profile-security-actions {
     flex-direction: column;

@@ -32,6 +32,9 @@
   var RUNTIME_API_BASE = BACKEND_API_BASE;
   var protectedPromptState = null;
   var inactivityLockTimerId = null;
+  var inactivityLockDueAtMs = 0;
+  var autoLockCountdownIntervalId = null;
+  var pinUnlockStatusTimerId = null;
 
   var categoryKeywords = {
     expense: {
@@ -92,7 +95,9 @@
 
     dom.pinUnlockForm = byId("pinUnlockForm");
     dom.unlockPin = byId("unlockPin");
+    dom.unlockPinBtn = byId("unlockPinBtn");
     dom.pinMessage = byId("pinMessage");
+    dom.pinLockHint = byId("pinLockHint");
 
     dom.totalBalance = byId("totalBalance");
     dom.netWorth = byId("netWorth");
@@ -200,6 +205,8 @@
     dom.autoLockForm = byId("autoLockForm");
     dom.autoLockEnabledInput = byId("autoLockEnabledInput");
     dom.autoLockMinutesInput = byId("autoLockMinutesInput");
+    dom.autoLockCountdown = byId("autoLockCountdown");
+    dom.lockNowBtn = byId("lockNowBtn");
     dom.autoLockMessage = byId("autoLockMessage");
     dom.forgotPasswordModal = byId("forgotPasswordModal");
     dom.forgotPasswordForm = byId("forgotPasswordForm");
@@ -307,6 +314,9 @@
     if (dom.autoLockEnabledInput) {
       dom.autoLockEnabledInput.addEventListener("change", handleAutoLockToggleChange);
     }
+    if (dom.lockNowBtn) {
+      dom.lockNowBtn.addEventListener("click", handleLockNowClick);
+    }
     if (dom.forgotPasswordModal) {
       dom.forgotPasswordModal.addEventListener("click", handleForgotPasswordModalClick);
     }
@@ -401,10 +411,12 @@
       window.AuthService.unlockSession(dom.unlockPin.value);
       dom.pinUnlockForm.reset();
       dom.pinMessage.textContent = "";
+      refreshPinUnlockStatusUi();
       activateApp();
     } catch (error) {
       dom.pinMessage.textContent = error.message;
       dom.pinMessage.style.color = "var(--danger)";
+      refreshPinUnlockStatusUi();
     }
   }
 
@@ -419,9 +431,18 @@
     try {
       window.AuthService.lockSession();
       showView("pin");
+      if (dom.pinMessage) {
+        dom.pinMessage.textContent = "App locked. Enter PIN to continue.";
+        dom.pinMessage.style.color = "var(--muted)";
+      }
+      refreshPinUnlockStatusUi();
     } catch (error) {
       setAppMessage(error.message, true);
     }
+  }
+
+  function handleLockNowClick() {
+    handleLock();
   }
 
   function syncViewFromSession() {
@@ -618,6 +639,12 @@
       syncAutoLockTimerState();
     } else {
       clearAutoLockInactivityTimer();
+    }
+    if (isPin) {
+      refreshPinUnlockStatusUi();
+      startPinUnlockStatusTicker();
+    } else {
+      clearPinUnlockStatusTicker();
     }
   }
 
@@ -1129,6 +1156,7 @@
     dom.autoLockMinutesInput.value = String(minutes);
     dom.autoLockMinutesInput.disabled = !enabled;
     setAutoLockMessage("", false);
+    updateAutoLockCountdownUi();
   }
 
   function handleAutoLockToggleChange() {
@@ -1136,6 +1164,7 @@
       return;
     }
     dom.autoLockMinutesInput.disabled = !dom.autoLockEnabledInput.checked;
+    updateAutoLockCountdownUi();
   }
 
   function openProfileModal() {
@@ -1388,13 +1417,56 @@
       clearTimeout(inactivityLockTimerId);
       inactivityLockTimerId = null;
     }
+    if (autoLockCountdownIntervalId) {
+      clearInterval(autoLockCountdownIntervalId);
+      autoLockCountdownIntervalId = null;
+    }
+    inactivityLockDueAtMs = 0;
+    updateAutoLockCountdownUi();
+  }
+
+  function updateAutoLockCountdownUi() {
+    if (!dom.autoLockCountdown) {
+      return;
+    }
+    if (!isAutoLockEnabled(state.user)) {
+      dom.autoLockCountdown.textContent = "Disabled";
+      return;
+    }
+    var remaining = inactivityLockDueAtMs - Date.now();
+    if (remaining <= 0) {
+      dom.autoLockCountdown.textContent = "Locking...";
+      return;
+    }
+    dom.autoLockCountdown.textContent = formatDurationCountdown(remaining);
+  }
+
+  function startAutoLockCountdownTicker() {
+    if (autoLockCountdownIntervalId) {
+      clearInterval(autoLockCountdownIntervalId);
+      autoLockCountdownIntervalId = null;
+    }
+    updateAutoLockCountdownUi();
+    if (!isAutoLockEnabled(state.user) || !inactivityLockDueAtMs) {
+      return;
+    }
+    autoLockCountdownIntervalId = setInterval(function () {
+      updateAutoLockCountdownUi();
+      if (inactivityLockDueAtMs <= Date.now()) {
+        clearInterval(autoLockCountdownIntervalId);
+        autoLockCountdownIntervalId = null;
+      }
+    }, 1000);
   }
 
   function syncAutoLockTimerState() {
     clearAutoLockInactivityTimer();
     if (!isAutoLockEnabled(state.user)) {
+      updateAutoLockCountdownUi();
       return;
     }
+    inactivityLockDueAtMs = Date.now() + getAutoLockMinutes(state.user && state.user.settings) * 60 * 1000;
+    startAutoLockCountdownTicker();
     inactivityLockTimerId = setTimeout(function () {
       clearAutoLockInactivityTimer();
       if (!isAutoLockEnabled(state.user)) {
@@ -1410,14 +1482,86 @@
           dom.pinMessage.textContent = "App locked due to inactivity. Enter PIN to continue.";
           dom.pinMessage.style.color = "var(--muted)";
         }
+        refreshPinUnlockStatusUi();
       } catch (error) {
         return;
       }
-    }, getAutoLockMinutes(state.user && state.user.settings) * 60 * 1000);
+    }, Math.max(0, inactivityLockDueAtMs - Date.now()));
   }
 
   function handleAutoLockActivity() {
+    if (!isAutoLockEnabled(state.user)) {
+      return;
+    }
     syncAutoLockTimerState();
+  }
+
+  function getPinSecurityStatus() {
+    if (!window.AuthService || typeof window.AuthService.getPinSecurityStatus !== "function") {
+      return {
+        maxAttempts: 5,
+        attemptsUsed: 0,
+        attemptsLeft: 5,
+        isBlocked: false,
+        remainingMs: 0
+      };
+    }
+    return window.AuthService.getPinSecurityStatus();
+  }
+
+  function refreshPinUnlockStatusUi() {
+    if (!dom.unlockPin || !dom.unlockPinBtn || !dom.pinLockHint) {
+      return;
+    }
+    var status = getPinSecurityStatus();
+    var blocked = Boolean(status && status.isBlocked);
+    dom.unlockPin.disabled = blocked;
+    dom.unlockPinBtn.disabled = blocked;
+
+    if (blocked) {
+      dom.pinLockHint.textContent = "Locked for " + formatDurationCountdown(status.remainingMs) + " after too many incorrect attempts.";
+      dom.pinLockHint.style.color = "var(--danger)";
+      return;
+    }
+
+    var attemptsUsed = Number(status && status.attemptsUsed ? status.attemptsUsed : 0);
+    if (attemptsUsed > 0) {
+      dom.pinLockHint.textContent = Number(status && status.attemptsLeft != null ? status.attemptsLeft : 0) + " attempt(s) left before temporary lock.";
+      dom.pinLockHint.style.color = "var(--warning)";
+      return;
+    }
+
+    dom.pinLockHint.textContent = "";
+    dom.pinLockHint.style.color = "var(--muted)";
+  }
+
+  function clearPinUnlockStatusTicker() {
+    if (pinUnlockStatusTimerId) {
+      clearInterval(pinUnlockStatusTimerId);
+      pinUnlockStatusTimerId = null;
+    }
+  }
+
+  function startPinUnlockStatusTicker() {
+    clearPinUnlockStatusTicker();
+    refreshPinUnlockStatusUi();
+    pinUnlockStatusTimerId = setInterval(function () {
+      if (!dom.pinUnlockView || dom.pinUnlockView.classList.contains("hidden")) {
+        clearPinUnlockStatusTicker();
+        return;
+      }
+      refreshPinUnlockStatusUi();
+    }, 1000);
+  }
+
+  function formatDurationCountdown(ms) {
+    var totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+    var minutes = Math.floor(totalSeconds / 60);
+    var seconds = totalSeconds % 60;
+    if (minutes > 0) {
+      return minutes + "m " + String(seconds).padStart(2, "0") + "s";
+    }
+    return seconds + "s";
   }
 
   function openForgotPasswordModal() {
@@ -2704,9 +2848,11 @@
   }
 
   async function exportTransactionsPdf() {
-    var transactions = getTransactionsSorted(state.user.transactions);
+    var sortedTransactions = getTransactionsSorted(state.user.transactions);
+    var hasActiveFilters = hasActiveTransactionFilters();
+    var transactions = hasActiveFilters ? applyTransactionFilters(sortedTransactions) : sortedTransactions;
     if (transactions.length === 0) {
-      setAppMessage("No transactions available to export.", true);
+      setAppMessage(hasActiveFilters ? "No transactions match current filters for export." : "No transactions available to export.", true);
       return;
     }
 
@@ -2716,6 +2862,9 @@
     }
 
     try {
+      var generatedAt = new Date();
+      var timeZone = getClientTimeZone() || "Asia/Kolkata";
+      var exportMeta = buildPdfExportMeta(transactions, hasActiveFilters, generatedAt);
       var response = await fetchApi("/transactions/export/pdf", {
         method: "POST",
         headers: {
@@ -2724,6 +2873,9 @@
         body: JSON.stringify({
           title: "NexSpend Transactions Export",
           currency: state.user && state.user.settings ? state.user.settings.currency : "INR",
+          generatedAt: generatedAt.toISOString(),
+          timeZone: timeZone,
+          exportMeta: exportMeta,
           password: password,
           transactions: buildExportTransactionPayload(transactions)
         })
@@ -2734,7 +2886,8 @@
       }
 
       var pdfBlob = await response.blob();
-      downloadBlobFile("transactions_" + toDateInputValue(new Date()) + ".pdf", pdfBlob);
+      var fileStamp = buildPdfExportFileStamp(generatedAt);
+      downloadBlobFile("transactions_export_" + fileStamp + ".pdf", pdfBlob);
       setAppMessage("Password-protected PDF exported.", false);
     } catch (error) {
       setAppMessage("PDF export failed: " + error.message, true);
@@ -2754,6 +2907,105 @@
         notes: transaction.notes || ""
       };
     });
+  }
+
+  function hasActiveTransactionFilters() {
+    var filters = state.filters || {};
+    return Boolean(
+      filters.keyword ||
+      filters.categoryId ||
+      filters.type ||
+      filters.minAmount ||
+      filters.maxAmount ||
+      filters.fromDate ||
+      filters.toDate ||
+      filters.tag
+    );
+  }
+
+  function buildPdfExportMeta(transactions, hasActiveFilters, generatedAt) {
+    return {
+      scopeLabel: hasActiveFilters ? "Filtered transactions" : "All transactions",
+      dateRangeLabel: getPdfExportDateRangeLabel(transactions),
+      appliedFilters: getActiveFilterSummaryLines(),
+      fileTimestamp: buildPdfExportFileStamp(generatedAt)
+    };
+  }
+
+  function getPdfExportDateRangeLabel(transactions) {
+    if (state.filters && (state.filters.fromDate || state.filters.toDate)) {
+      var fromLabel = state.filters.fromDate ? formatDate(state.filters.fromDate) : "Any start";
+      var toLabel = state.filters.toDate ? formatDate(state.filters.toDate) : "Any end";
+      return fromLabel + " to " + toLabel;
+    }
+    var bounds = getTransactionDateBounds(transactions);
+    if (!bounds.from || !bounds.to) {
+      return "Not specified";
+    }
+    return formatDate(bounds.from) + " to " + formatDate(bounds.to);
+  }
+
+  function getTransactionDateBounds(transactions) {
+    var from = "";
+    var to = "";
+    (transactions || []).forEach(function (transaction) {
+      var date = String(transaction && transaction.date ? transaction.date : "");
+      if (!date) {
+        return;
+      }
+      if (!from || date < from) {
+        from = date;
+      }
+      if (!to || date > to) {
+        to = date;
+      }
+    });
+    return {
+      from: from,
+      to: to
+    };
+  }
+
+  function getActiveFilterSummaryLines() {
+    var filters = state.filters || {};
+    var lines = [];
+    if (filters.keyword) {
+      lines.push("Keyword: " + filters.keyword);
+    }
+    if (filters.categoryId) {
+      lines.push("Category: " + getCategoryName(filters.categoryId));
+    }
+    if (filters.type) {
+      lines.push("Type: " + capitalize(filters.type));
+    }
+    if (filters.minAmount || filters.maxAmount) {
+      var minText = filters.minAmount ? String(filters.minAmount) : "Any";
+      var maxText = filters.maxAmount ? String(filters.maxAmount) : "Any";
+      lines.push("Amount: " + minText + " to " + maxText);
+    }
+    if (filters.fromDate || filters.toDate) {
+      var fromText = filters.fromDate ? formatDate(filters.fromDate) : "Any";
+      var toText = filters.toDate ? formatDate(filters.toDate) : "Any";
+      lines.push("Date filter: " + fromText + " to " + toText);
+    }
+    if (filters.tag) {
+      lines.push("Tag: " + filters.tag);
+    }
+    if (lines.length === 0) {
+      return ["None"];
+    }
+    return lines;
+  }
+
+  function buildPdfExportFileStamp(date) {
+    var source = date instanceof Date ? date : new Date();
+    var year = source.getFullYear();
+    var month = String(source.getMonth() + 1).padStart(2, "0");
+    var day = String(source.getDate()).padStart(2, "0");
+    var hour = String(source.getHours()).padStart(2, "0");
+    var minute = String(source.getMinutes()).padStart(2, "0");
+    var second = String(source.getSeconds()).padStart(2, "0");
+    return year + month + day + "_" + hour + minute + second;
   }
 
   async function promptForProtectedExportPassword(fileTypeLabel) {
@@ -3940,6 +4192,18 @@
       hour: "2-digit",
       minute: "2-digit"
     });
+  }
+
+  function getClientTimeZone() {
+    try {
+      var resolved = Intl.DateTimeFormat().resolvedOptions();
+      if (resolved && resolved.timeZone) {
+        return String(resolved.timeZone).trim();
+      }
+    } catch (error) {
+      return "";
+    }
+    return "";
   }
 
   function formatMonthLabel(monthKey) {

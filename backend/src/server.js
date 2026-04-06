@@ -824,6 +824,87 @@ function formatCurrency(amount, currency) {
   }
 }
 
+function normalizePdfTimeZone(rawTimeZone) {
+  const candidate = String(rawTimeZone || "").trim();
+  if (!candidate) {
+    return "Asia/Kolkata";
+  }
+  try {
+    // Validate timezone name; falls back if invalid.
+    new Intl.DateTimeFormat("en-IN", { timeZone: candidate }).format(new Date());
+    return candidate;
+  } catch (error) {
+    return "Asia/Kolkata";
+  }
+}
+
+function formatPdfGeneratedAt(rawValue, timeZone) {
+  const parsed = new Date(String(rawValue || ""));
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const label = date.toLocaleString("en-IN", {
+    timeZone: timeZone,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
+  return label + " (" + timeZone + ")";
+}
+
+function buildPdfFileStamp(rawValue, timeZone, rawFileTimestamp) {
+  const provided = String(rawFileTimestamp || "").trim();
+  if (/^\d{8}_\d{6}$/.test(provided)) {
+    return provided;
+  }
+
+  const parsed = new Date(String(rawValue || ""));
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).formatToParts(date);
+  const map = {};
+  parts.forEach(function (part) {
+    if (part.type !== "literal") {
+      map[part.type] = part.value;
+    }
+  });
+  return String(map.year || "0000") +
+    String(map.month || "00") +
+    String(map.day || "00") +
+    "_" +
+    String(map.hour || "00") +
+    String(map.minute || "00") +
+    String(map.second || "00");
+}
+
+function normalizePdfExportMeta(rawMeta) {
+  const source = rawMeta && typeof rawMeta === "object" ? rawMeta : {};
+  const filtersRaw = Array.isArray(source.appliedFilters) ? source.appliedFilters : [];
+  const filters = filtersRaw
+    .map(function (value) {
+      return safeText(String(value || "").trim());
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+
+  return {
+    scopeLabel: safeText(String(source.scopeLabel || "All transactions")),
+    dateRangeLabel: safeText(String(source.dateRangeLabel || "Not specified")),
+    appliedFilters: filters.length ? filters : ["None"],
+    fileTimestamp: String(source.fileTimestamp || "").trim()
+  };
+}
+
 function safeText(value) {
   const text = String(value == null ? "" : value);
   return text.length > 180 ? text.slice(0, 177) + "..." : text;
@@ -1671,10 +1752,14 @@ app.post("/api/transactions/export/pdf", function (req, res) {
 
   const title = String((req.body && req.body.title) || "NexSpendFinance Transactions Export");
   const currency = String((req.body && req.body.currency) || "INR");
+  const timeZone = normalizePdfTimeZone(req.body && req.body.timeZone);
+  const generatedAtLabel = formatPdfGeneratedAt(req.body && req.body.generatedAt, timeZone);
+  const exportMeta = normalizePdfExportMeta(req.body && req.body.exportMeta);
+  const fileStamp = buildPdfFileStamp(req.body && req.body.generatedAt, timeZone, exportMeta.fileTimestamp);
 
   const doc = new PDFDocument(buildPdfDocOptions(passwordResult.value));
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", "attachment; filename=transactions_export.pdf");
+  res.setHeader("Content-Disposition", 'attachment; filename="transactions_export_' + fileStamp + '.pdf"');
   doc.pipe(res);
 
   const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
@@ -1683,7 +1768,11 @@ app.post("/api/transactions/export/pdf", function (req, res) {
   doc.fontSize(16).text(title, { width: pageWidth });
   y = doc.y + 2;
   doc.fontSize(10).fillColor("#555");
-  doc.text("Generated: " + new Date().toLocaleString(), { width: pageWidth });
+  doc.text("Generated: " + generatedAtLabel, { width: pageWidth });
+  doc.text("Timezone: " + timeZone, { width: pageWidth });
+  doc.text("Scope: " + exportMeta.scopeLabel, { width: pageWidth });
+  doc.text("Date Range: " + exportMeta.dateRangeLabel, { width: pageWidth });
+  doc.text("Filters: " + exportMeta.appliedFilters.join(" | "), { width: pageWidth });
   y = doc.y + 10;
 
   doc.fillColor("#111").fontSize(11).text("Transactions: " + transactions.length, doc.page.margins.left, y);

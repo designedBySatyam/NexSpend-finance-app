@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./css/styles.css?v=20260406-settings-mode3">
+  <link rel="stylesheet" href="./css/styles.css?v=20260406-settings-mode5">
 </head>
 <body>
 
@@ -127,12 +127,13 @@
             <label for="unlockPin">PIN</label>
             <input id="unlockPin" type="password" minlength="4" maxlength="6" inputmode="numeric" required placeholder="● ● ● ●" autocomplete="off">
           </div>
-          <button class="btn btn-primary btn-block" type="submit">Unlock</button>
-        </form>
-        <p id="pinMessage" class="status-text"></p>
-      </div>
-    </div>
-  </section>
+	          <button id="unlockPinBtn" class="btn btn-primary btn-block" type="submit">Unlock</button>
+	        </form>
+	        <p id="pinMessage" class="status-text"></p>
+	        <p id="pinLockHint" class="status-text pin-lock-hint"></p>
+	      </div>
+	    </div>
+	  </section>
 
   <!-- ─── APP VIEW ────────────────────────────────────────────────────────── -->
   <section id="appView" class="app-layout hidden">
@@ -353,30 +354,34 @@
               </form>
             </section>
 
-            <section class="settings-section hidden" data-settings-panel="autolock">
-              <form id="autoLockForm" class="profile-form">
-                <p class="profile-subtitle">Inactivity Auto Lock</p>
-                <p class="profile-security-copy">Lock the app automatically after inactivity. Unlock will require your PIN.</p>
-                <label class="settings-toggle-row" for="autoLockEnabledInput">
-                  <span>Enable Auto Lock</span>
-                  <input id="autoLockEnabledInput" type="checkbox">
-                </label>
-                <div class="field">
-                  <label for="autoLockMinutesInput">Lock After</label>
-                  <select id="autoLockMinutesInput">
-                    <option value="1">1 minute</option>
-                    <option value="2">2 minutes</option>
-                    <option value="5">5 minutes</option>
-                    <option value="10">10 minutes</option>
-                    <option value="15">15 minutes</option>
-                    <option value="30">30 minutes</option>
-                  </select>
-                </div>
-                <p id="autoLockMessage" class="status-text profile-form-message"></p>
-                <div class="record-actions">
-                  <button id="saveAutoLockBtn" class="btn btn-primary" type="submit">Save Auto Lock</button>
-                </div>
-              </form>
+	            <section class="settings-section hidden" data-settings-panel="autolock">
+	              <form id="autoLockForm" class="profile-form">
+	                <p class="profile-subtitle">Inactivity Auto Lock</p>
+	                <p class="profile-security-copy">Lock the app automatically after inactivity. Unlock will require your PIN.</p>
+	                <label class="settings-toggle-row" for="autoLockEnabledInput">
+	                  <span>Enable Auto Lock</span>
+	                  <input id="autoLockEnabledInput" type="checkbox">
+	                </label>
+	                <div class="field">
+	                  <label for="autoLockMinutesInput">Lock After</label>
+	                  <select id="autoLockMinutesInput">
+	                    <option value="1">1 minute</option>
+	                    <option value="2">2 minutes</option>
+	                    <option value="5">5 minutes</option>
+	                    <option value="10">10 minutes</option>
+	                    <option value="15">15 minutes</option>
+	                    <option value="30">30 minutes</option>
+	                  </select>
+	                </div>
+	                <div class="auto-lock-live-row">
+	                  <p class="profile-security-copy">Next auto lock in: <strong id="autoLockCountdown">Disabled</strong></p>
+	                  <button id="lockNowBtn" class="btn btn-ghost" type="button">Lock Now</button>
+	                </div>
+	                <p id="autoLockMessage" class="status-text profile-form-message"></p>
+	                <div class="record-actions">
+	                  <button id="saveAutoLockBtn" class="btn btn-primary" type="submit">Save Auto Lock</button>
+	                </div>
+	              </form>
             </section>
           </div>
         </section>
@@ -1114,10 +1119,10 @@
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-  <script src="./js/storage.js?v=20260406-settings-mode3"></script>
-  <script src="./js/auth.js?v=20260406-settings-mode3"></script>
-  <script src="./js/charts.js?v=20260406-settings-mode3"></script>
-  <script src="./js/app.js?v=20260406-settings-mode3"></script>
+  <script src="./js/storage.js?v=20260406-settings-mode5"></script>
+  <script src="./js/auth.js?v=20260406-settings-mode5"></script>
+  <script src="./js/charts.js?v=20260406-settings-mode5"></script>
+  <script src="./js/app.js?v=20260406-settings-mode5"></script>
 
   <!-- Mobile sidebar toggle -->
   <script>

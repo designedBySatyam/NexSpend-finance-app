@@ -4,6 +4,8 @@
   var SESSION_KEY = "finance_tracker_session_v1";
   var DEFAULT_API_PATH = "/api";
   var syncQueue = Promise.resolve();
+  var PIN_MAX_ATTEMPTS = 5;
+  var PIN_LOCKOUT_MS = 5 * 60 * 1000;
 
   function safeParse(raw, fallbackValue) {
     try {
@@ -162,6 +164,28 @@
     return clean;
   }
 
+  function getPinBlockedRemainingMs(session) {
+    var blockedUntil = String(session && session.pinBlockedUntil ? session.pinBlockedUntil : "").trim();
+    if (!blockedUntil) {
+      return 0;
+    }
+    var parsed = new Date(blockedUntil);
+    if (Number.isNaN(parsed.getTime())) {
+      return 0;
+    }
+    return Math.max(0, parsed.getTime() - Date.now());
+  }
+
+  function formatRemainingTime(ms) {
+    var totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+    var minutes = Math.floor(totalSeconds / 60);
+    var seconds = totalSeconds % 60;
+    if (minutes > 0) {
+      return minutes + "m " + String(seconds).padStart(2, "0") + "s";
+    }
+    return seconds + "s";
+  }
+
   function serializeUserDataForBackend(user) {
     var source = user || {};
     return {
@@ -234,10 +258,13 @@
 
   function establishSession(userId, token, sourceLabel) {
     var previous = getSession() || {};
+    var sameUserSession = previous && previous.userId === userId ? previous : {};
     setSession({
       userId: userId,
       authToken: token || previous.authToken || "",
       isLocked: false,
+      pinFailedAttempts: Number(sameUserSession.pinFailedAttempts || 0),
+      pinBlockedUntil: sameUserSession.pinBlockedUntil || "",
       lastLoginAt: new Date().toISOString(),
       source: sourceLabel || "backend"
     });
@@ -498,6 +525,8 @@
       throw new Error("Set a PIN in sign-up before using lock.");
     }
     session.isLocked = true;
+    session.pinFailedAttempts = 0;
+    session.pinBlockedUntil = "";
     setSession(session);
   }
 
@@ -513,14 +542,44 @@
       throw new Error("No PIN available for this account.");
     }
 
+    var remainingMs = getPinBlockedRemainingMs(session);
+    if (remainingMs > 0) {
+      throw new Error("Too many incorrect PIN attempts. Try again in " + formatRemainingTime(remainingMs) + ".");
+    }
+
     if (createHash(normalizeText(pin)) !== pinHash) {
-      throw new Error("Incorrect PIN.");
+      var attempts = Number(session.pinFailedAttempts || 0) + 1;
+      if (attempts >= PIN_MAX_ATTEMPTS) {
+        session.pinFailedAttempts = 0;
+        session.pinBlockedUntil = new Date(Date.now() + PIN_LOCKOUT_MS).toISOString();
+        setSession(session);
+        throw new Error("Too many incorrect PIN attempts. Try again in " + formatRemainingTime(PIN_LOCKOUT_MS) + ".");
+      }
+      session.pinFailedAttempts = attempts;
+      session.pinBlockedUntil = "";
+      setSession(session);
+      throw new Error("Incorrect PIN. " + (PIN_MAX_ATTEMPTS - attempts) + " attempt(s) left.");
     }
 
     session.isLocked = false;
+    session.pinFailedAttempts = 0;
+    session.pinBlockedUntil = "";
     session.unlockedAt = new Date().toISOString();
     setSession(session);
     return true;
+  }
+
+  function getPinSecurityStatus() {
+    var session = getSession();
+    var attempts = Number(session && session.pinFailedAttempts ? session.pinFailedAttempts : 0);
+    var remainingMs = getPinBlockedRemainingMs(session);
+    return {
+      maxAttempts: PIN_MAX_ATTEMPTS,
+      attemptsUsed: attempts,
+      attemptsLeft: Math.max(0, PIN_MAX_ATTEMPTS - attempts),
+      isBlocked: remainingMs > 0,
+      remainingMs: remainingMs
+    };
   }
 
   function isLocked() {
@@ -580,6 +639,7 @@
     isLocked: isLocked,
     setPin: setPin,
     getSession: getSession,
+    getPinSecurityStatus: getPinSecurityStatus,
     getCurrentUser: getCurrentUser,
     updateCurrentUser: updateCurrentUser,
     refreshCurrentUserFromBackend: refreshCurrentUserFromBackend
