@@ -3,6 +3,7 @@ const cors = require("cors");
 const multer = require("multer");
 const PDFDocument = require("pdfkit");
 const pdfParse = require("pdf-parse");
+const { MongoClient } = require("mongodb");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
@@ -20,6 +21,15 @@ const upload = multer({
 const PORT = Number(process.env.PORT || 4000);
 const DB_PATH = path.join(__dirname, "..", "data", "db.json");
 const FRONTEND_DIR = path.join(__dirname, "..", "..", "frontend");
+const MONGODB_URI = String(process.env.MONGODB_URI || "").trim();
+const MONGODB_DB_NAME = String(process.env.MONGODB_DB_NAME || "nexspend").trim() || "nexspend";
+const USE_MONGODB = Boolean(MONGODB_URI);
+const USERS_COLLECTION_NAME = "users";
+const SESSIONS_COLLECTION_NAME = "sessions";
+const RESET_CODE_TTL_MINUTES = Number(process.env.RESET_CODE_TTL_MINUTES || 15);
+
+let mongoClient = null;
+let mongoDb = null;
 
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
@@ -66,12 +76,91 @@ function withDb(mutator) {
   return value;
 }
 
+function isMongoDuplicateKeyError(error) {
+  return Boolean(error && error.code === 11000);
+}
+
+async function initializeStorage() {
+  if (!USE_MONGODB) {
+    ensureDbFile();
+    return "file";
+  }
+
+  mongoClient = new MongoClient(MONGODB_URI, {
+    maxPoolSize: 10
+  });
+  await mongoClient.connect();
+  mongoDb = mongoClient.db(MONGODB_DB_NAME);
+
+  const usersCollection = mongoDb.collection(USERS_COLLECTION_NAME);
+  const sessionsCollection = mongoDb.collection(SESSIONS_COLLECTION_NAME);
+
+  await Promise.all([
+    usersCollection.createIndex({ id: 1 }, { unique: true }),
+    usersCollection.createIndex({ email: 1 }, { unique: true }),
+    sessionsCollection.createIndex({ token: 1 }, { unique: true }),
+    sessionsCollection.createIndex({ userId: 1 })
+  ]);
+
+  return "mongo";
+}
+
+function getMongoCollection(name) {
+  if (!mongoDb) {
+    throw new Error("MongoDB is not initialized.");
+  }
+  return mongoDb.collection(name);
+}
+
+async function findAuthContextByToken(token) {
+  if (USE_MONGODB) {
+    const sessionsCollection = getMongoCollection(SESSIONS_COLLECTION_NAME);
+    const usersCollection = getMongoCollection(USERS_COLLECTION_NAME);
+
+    const session = await sessionsCollection.findOne({ token: token });
+    if (!session) {
+      return { session: null, user: null };
+    }
+
+    const user = await usersCollection.findOne({ id: session.userId });
+    return { session: session, user: user || null };
+  }
+
+  const db = readDb();
+  const session = db.sessions.find(function (item) {
+    return item.token === token;
+  });
+  if (!session) {
+    return { session: null, user: null };
+  }
+  const user = db.users.find(function (item) {
+    return item.id === session.userId;
+  });
+  return { session: session, user: user || null };
+}
+
 function hashText(value) {
   return crypto.createHash("sha256").update(String(value || "")).digest("hex");
 }
 
 function createToken() {
   return crypto.randomBytes(32).toString("hex");
+}
+
+function createResetCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function createResetCodeExpiryIso() {
+  return new Date(Date.now() + RESET_CODE_TTL_MINUTES * 60 * 1000).toISOString();
+}
+
+function isExpiredIsoDate(value) {
+  const date = new Date(String(value || ""));
+  if (Number.isNaN(date.getTime())) {
+    return true;
+  }
+  return date.getTime() < Date.now();
 }
 
 function normalizeEmail(value) {
@@ -87,15 +176,29 @@ function createDefaultUserData(email) {
     id: "user_" + Date.now(),
     email: email,
     transactions: [],
-    categories: [],
+    profileName: "",
+    categories: [
+      { id: "cat_food", name: "Food", type: "expense", system: true },
+      { id: "cat_rent", name: "Rent", type: "expense", system: true },
+      { id: "cat_travel", name: "Travel", type: "expense", system: true },
+      { id: "cat_bills", name: "Bills", type: "expense", system: true },
+      { id: "cat_shopping", name: "Shopping", type: "expense", system: true },
+      { id: "cat_health", name: "Health", type: "expense", system: true },
+      { id: "cat_subscriptions", name: "Subscriptions", type: "expense", system: true },
+      { id: "cat_salary", name: "Salary", type: "income", system: true },
+      { id: "cat_freelance", name: "Freelance", type: "income", system: true },
+      { id: "cat_investment", name: "Investment", type: "income", system: true }
+    ],
     budgets: [],
     reminders: [],
     recurringRules: [],
     goals: [],
-    accounts: [],
+    accounts: [
+      { id: "acct_wallet", name: "Cash Wallet", type: "wallet", initialBalance: 0 }
+    ],
     settings: {
       currency: "INR",
-      theme: "dark",
+      theme: "light",
       pinHash: ""
     }
   };
@@ -105,6 +208,7 @@ function sanitizeUser(user) {
   return {
     id: user.id,
     email: user.email,
+    profileName: user.profileName || "",
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   };
@@ -118,36 +222,30 @@ function getAuthToken(req) {
   return String(req.headers["x-auth-token"] || "").trim();
 }
 
-function requireAuth(req, res, next) {
-  const token = getAuthToken(req);
-  if (!token) {
-    res.status(401).json({ message: "Authentication token is required." });
-    return;
+async function requireAuth(req, res, next) {
+  try {
+    const token = getAuthToken(req);
+    if (!token) {
+      res.status(401).json({ message: "Authentication token is required." });
+      return;
+    }
+
+    const authContext = await findAuthContextByToken(token);
+    if (!authContext.session) {
+      res.status(401).json({ message: "Invalid or expired session token." });
+      return;
+    }
+    if (!authContext.user) {
+      res.status(401).json({ message: "User for this session was not found." });
+      return;
+    }
+
+    req.sessionToken = token;
+    req.authUser = authContext.user;
+    next();
+  } catch (error) {
+    next(error);
   }
-
-  const db = readDb();
-  const session = db.sessions.find(function (item) {
-    return item.token === token;
-  });
-
-  if (!session) {
-    res.status(401).json({ message: "Invalid or expired session token." });
-    return;
-  }
-
-  const user = db.users.find(function (item) {
-    return item.id === session.userId;
-  });
-
-  if (!user) {
-    res.status(401).json({ message: "User for this session was not found." });
-    return;
-  }
-
-  req.sessionToken = token;
-  req.authUser = user;
-  req.dbSnapshot = db;
-  next();
 }
 
 function parseAmountText(value) {
@@ -792,113 +890,495 @@ app.get("/api/health", function (_req, res) {
   });
 });
 
-app.post("/api/auth/signup", function (req, res) {
-  const email = normalizeEmail(req.body && req.body.email);
-  const password = String((req.body && req.body.password) || "").trim();
-  const pin = String((req.body && req.body.pin) || "").trim();
+app.post("/api/auth/signup", async function (req, res, next) {
+  try {
+    const email = normalizeEmail(req.body && req.body.email);
+    const password = String((req.body && req.body.password) || "").trim();
+    const pin = String((req.body && req.body.pin) || "").trim();
 
-  if (!isValidEmail(email)) {
-    res.status(400).json({ message: "A valid email is required." });
-    return;
-  }
-  if (password.length < 6) {
-    res.status(400).json({ message: "Password must be at least 6 characters." });
-    return;
-  }
-  if (pin && !/^\d{4,6}$/.test(pin)) {
-    res.status(400).json({ message: "PIN must be 4 to 6 digits." });
-    return;
-  }
-
-  const result = withDb(function (db) {
-    const exists = db.users.some(function (item) {
-      return item.email === email;
-    });
-    if (exists) {
-      return { error: "An account with this email already exists." };
+    if (!isValidEmail(email)) {
+      res.status(400).json({ message: "A valid email is required." });
+      return;
+    }
+    if (password.length < 6) {
+      res.status(400).json({ message: "Password must be at least 6 characters." });
+      return;
+    }
+    if (pin && !/^\d{4,6}$/.test(pin)) {
+      res.status(400).json({ message: "PIN must be 4 to 6 digits." });
+      return;
     }
 
-    const now = new Date().toISOString();
-    const user = {
-      id: "usr_" + Date.now() + "_" + Math.floor(Math.random() * 1000000),
-      email: email,
-      passwordHash: hashText(password),
-      pinHash: pin ? hashText(pin) : "",
-      createdAt: now,
-      updatedAt: now,
-      data: createDefaultUserData(email)
-    };
-    db.users.push(user);
+    if (USE_MONGODB) {
+      const usersCollection = getMongoCollection(USERS_COLLECTION_NAME);
+      const sessionsCollection = getMongoCollection(SESSIONS_COLLECTION_NAME);
+      const now = new Date().toISOString();
+      const user = {
+        id: "usr_" + Date.now() + "_" + Math.floor(Math.random() * 1000000),
+        email: email,
+        profileName: String((req.body && req.body.profileName) || "").trim(),
+        passwordHash: hashText(password),
+        pinHash: pin ? hashText(pin) : "",
+        createdAt: now,
+        updatedAt: now,
+        data: createDefaultUserData(email)
+      };
 
-    const token = createToken();
-    db.sessions.push({
-      token: token,
-      userId: user.id,
-      createdAt: now,
-      lastSeenAt: now
-    });
+      try {
+        await usersCollection.insertOne(user);
+      } catch (error) {
+        if (isMongoDuplicateKeyError(error)) {
+          res.status(409).json({ message: "An account with this email already exists." });
+          return;
+        }
+        throw error;
+      }
 
-    return {
-      token: token,
-      user: sanitizeUser(user),
-      data: user.data
-    };
-  });
+      const token = createToken();
+      await sessionsCollection.insertOne({
+        token: token,
+        userId: user.id,
+        createdAt: now,
+        lastSeenAt: now
+      });
 
-  if (result.error) {
-    res.status(409).json({ message: result.error });
-    return;
-  }
-
-  res.status(201).json(result);
-});
-
-app.post("/api/auth/login", function (req, res) {
-  const email = normalizeEmail(req.body && req.body.email);
-  const password = String((req.body && req.body.password) || "").trim();
-
-  const result = withDb(function (db) {
-    const user = db.users.find(function (item) {
-      return item.email === email;
-    });
-
-    if (!user || user.passwordHash !== hashText(password)) {
-      return { error: "Invalid email or password." };
+      res.status(201).json({
+        token: token,
+        user: sanitizeUser(user),
+        data: user.data
+      });
+      return;
     }
 
-    const token = createToken();
-    const now = new Date().toISOString();
-    db.sessions.push({
-      token: token,
-      userId: user.id,
-      createdAt: now,
-      lastSeenAt: now
+    const result = withDb(function (db) {
+      const exists = db.users.some(function (item) {
+        return item.email === email;
+      });
+      if (exists) {
+        return { error: "An account with this email already exists." };
+      }
+
+      const now = new Date().toISOString();
+      const user = {
+        id: "usr_" + Date.now() + "_" + Math.floor(Math.random() * 1000000),
+        email: email,
+        profileName: String((req.body && req.body.profileName) || "").trim(),
+        passwordHash: hashText(password),
+        pinHash: pin ? hashText(pin) : "",
+        createdAt: now,
+        updatedAt: now,
+        data: createDefaultUserData(email)
+      };
+      db.users.push(user);
+
+      const token = createToken();
+      db.sessions.push({
+        token: token,
+        userId: user.id,
+        createdAt: now,
+        lastSeenAt: now
+      });
+
+      return {
+        token: token,
+        user: sanitizeUser(user),
+        data: user.data
+      };
     });
 
-    return {
-      token: token,
-      user: sanitizeUser(user),
-      data: user.data
-    };
-  });
+    if (result.error) {
+      res.status(409).json({ message: result.error });
+      return;
+    }
 
-  if (result.error) {
-    res.status(401).json({ message: result.error });
-    return;
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
   }
-
-  res.json(result);
 });
 
-app.post("/api/auth/logout", requireAuth, function (req, res) {
-  withDb(function (db) {
-    db.sessions = db.sessions.filter(function (session) {
-      return session.token !== req.sessionToken;
-    });
-    return null;
-  });
+app.post("/api/auth/login", async function (req, res, next) {
+  try {
+    const email = normalizeEmail(req.body && req.body.email);
+    const password = String((req.body && req.body.password) || "").trim();
 
-  res.json({ ok: true });
+    if (USE_MONGODB) {
+      const usersCollection = getMongoCollection(USERS_COLLECTION_NAME);
+      const sessionsCollection = getMongoCollection(SESSIONS_COLLECTION_NAME);
+      const user = await usersCollection.findOne({ email: email });
+
+      if (!user || user.passwordHash !== hashText(password)) {
+        res.status(401).json({ message: "Invalid email or password." });
+        return;
+      }
+
+      const token = createToken();
+      const now = new Date().toISOString();
+      await sessionsCollection.insertOne({
+        token: token,
+        userId: user.id,
+        createdAt: now,
+        lastSeenAt: now
+      });
+
+      res.json({
+        token: token,
+        user: sanitizeUser(user),
+        data: user.data
+      });
+      return;
+    }
+
+    const result = withDb(function (db) {
+      const user = db.users.find(function (item) {
+        return item.email === email;
+      });
+
+      if (!user || user.passwordHash !== hashText(password)) {
+        return { error: "Invalid email or password." };
+      }
+
+      const token = createToken();
+      const now = new Date().toISOString();
+      db.sessions.push({
+        token: token,
+        userId: user.id,
+        createdAt: now,
+        lastSeenAt: now
+      });
+
+      return {
+        token: token,
+        user: sanitizeUser(user),
+        data: user.data
+      };
+    });
+
+    if (result.error) {
+      res.status(401).json({ message: result.error });
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/logout", requireAuth, async function (req, res, next) {
+  try {
+    if (USE_MONGODB) {
+      const sessionsCollection = getMongoCollection(SESSIONS_COLLECTION_NAME);
+      await sessionsCollection.deleteOne({ token: req.sessionToken });
+    } else {
+      withDb(function (db) {
+        db.sessions = db.sessions.filter(function (session) {
+          return session.token !== req.sessionToken;
+        });
+        return null;
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/change-password", requireAuth, async function (req, res, next) {
+  try {
+    const currentPassword = String((req.body && req.body.currentPassword) || "").trim();
+    const newPassword = String((req.body && req.body.newPassword) || "").trim();
+
+    if (!currentPassword) {
+      res.status(400).json({ message: "Current password is required." });
+      return;
+    }
+    if (newPassword.length < 6) {
+      res.status(400).json({ message: "New password must be at least 6 characters." });
+      return;
+    }
+
+    const nextPasswordHash = hashText(newPassword);
+
+    if (USE_MONGODB) {
+      const usersCollection = getMongoCollection(USERS_COLLECTION_NAME);
+      const sessionsCollection = getMongoCollection(SESSIONS_COLLECTION_NAME);
+      const user = await usersCollection.findOne({ id: req.authUser.id });
+
+      if (!user) {
+        res.status(404).json({ message: "User not found." });
+        return;
+      }
+      if (user.passwordHash !== hashText(currentPassword)) {
+        res.status(401).json({ message: "Current password is incorrect." });
+        return;
+      }
+      if (user.passwordHash === nextPasswordHash) {
+        res.status(400).json({ message: "New password must be different from current password." });
+        return;
+      }
+
+      const now = new Date().toISOString();
+      await usersCollection.updateOne(
+        { id: user.id },
+        {
+          $set: {
+            passwordHash: nextPasswordHash,
+            updatedAt: now,
+            resetPasswordHash: "",
+            resetPasswordExpiresAt: ""
+          }
+        }
+      );
+
+      await sessionsCollection.deleteMany({
+        userId: user.id,
+        token: { $ne: req.sessionToken }
+      });
+
+      res.json({
+        ok: true,
+        message: "Password changed successfully."
+      });
+      return;
+    }
+
+    const result = withDb(function (db) {
+      const user = db.users.find(function (item) {
+        return item.id === req.authUser.id;
+      });
+      if (!user) {
+        return { notFound: true };
+      }
+      if (user.passwordHash !== hashText(currentPassword)) {
+        return { invalidCurrentPassword: true };
+      }
+      if (user.passwordHash === nextPasswordHash) {
+        return { samePassword: true };
+      }
+
+      user.passwordHash = nextPasswordHash;
+      user.updatedAt = new Date().toISOString();
+      user.resetPasswordHash = "";
+      user.resetPasswordExpiresAt = "";
+
+      db.sessions = db.sessions.filter(function (session) {
+        return !(session.userId === user.id && session.token !== req.sessionToken);
+      });
+
+      return { ok: true };
+    });
+
+    if (result.notFound) {
+      res.status(404).json({ message: "User not found." });
+      return;
+    }
+    if (result.invalidCurrentPassword) {
+      res.status(401).json({ message: "Current password is incorrect." });
+      return;
+    }
+    if (result.samePassword) {
+      res.status(400).json({ message: "New password must be different from current password." });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      message: "Password changed successfully."
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/forgot-password/request", async function (req, res, next) {
+  try {
+    const email = normalizeEmail(req.body && req.body.email);
+    if (!isValidEmail(email)) {
+      res.status(400).json({ message: "A valid email is required." });
+      return;
+    }
+
+    const genericMessage = "If an account exists for this email, a reset code has been generated.";
+
+    if (USE_MONGODB) {
+      const usersCollection = getMongoCollection(USERS_COLLECTION_NAME);
+      const user = await usersCollection.findOne({ email: email });
+      if (!user) {
+        res.json({ ok: true, message: genericMessage });
+        return;
+      }
+
+      const resetCode = createResetCode();
+      const expiresAt = createResetCodeExpiryIso();
+      await usersCollection.updateOne(
+        { id: user.id },
+        {
+          $set: {
+            resetPasswordHash: hashText(resetCode),
+            resetPasswordExpiresAt: expiresAt,
+            updatedAt: new Date().toISOString()
+          }
+        }
+      );
+
+      res.json({
+        ok: true,
+        message: "Reset code generated. Use this code to set a new password.",
+        resetCode: resetCode,
+        expiresAt: expiresAt
+      });
+      return;
+    }
+
+    const result = withDb(function (db) {
+      const user = db.users.find(function (item) {
+        return item.email === email;
+      });
+      if (!user) {
+        return { user: null };
+      }
+
+      const resetCode = createResetCode();
+      const expiresAt = createResetCodeExpiryIso();
+      user.resetPasswordHash = hashText(resetCode);
+      user.resetPasswordExpiresAt = expiresAt;
+      user.updatedAt = new Date().toISOString();
+
+      return {
+        user: user,
+        resetCode: resetCode,
+        expiresAt: expiresAt
+      };
+    });
+
+    if (!result.user) {
+      res.json({ ok: true, message: genericMessage });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      message: "Reset code generated. Use this code to set a new password.",
+      resetCode: result.resetCode,
+      expiresAt: result.expiresAt
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/forgot-password/confirm", async function (req, res, next) {
+  try {
+    const email = normalizeEmail(req.body && req.body.email);
+    const code = String((req.body && req.body.code) || "").trim();
+    const newPassword = String((req.body && req.body.newPassword) || "").trim();
+
+    if (!isValidEmail(email)) {
+      res.status(400).json({ message: "A valid email is required." });
+      return;
+    }
+    if (!code) {
+      res.status(400).json({ message: "Reset code is required." });
+      return;
+    }
+    if (newPassword.length < 6) {
+      res.status(400).json({ message: "New password must be at least 6 characters." });
+      return;
+    }
+
+    const nextPasswordHash = hashText(newPassword);
+    const invalidCodeMessage = "Reset code is invalid or expired.";
+
+    if (USE_MONGODB) {
+      const usersCollection = getMongoCollection(USERS_COLLECTION_NAME);
+      const sessionsCollection = getMongoCollection(SESSIONS_COLLECTION_NAME);
+      const user = await usersCollection.findOne({ email: email });
+
+      if (!user || !user.resetPasswordHash || !user.resetPasswordExpiresAt) {
+        res.status(400).json({ message: invalidCodeMessage });
+        return;
+      }
+      if (isExpiredIsoDate(user.resetPasswordExpiresAt)) {
+        res.status(400).json({ message: invalidCodeMessage });
+        return;
+      }
+      if (user.resetPasswordHash !== hashText(code)) {
+        res.status(400).json({ message: invalidCodeMessage });
+        return;
+      }
+      if (user.passwordHash === nextPasswordHash) {
+        res.status(400).json({ message: "New password must be different from current password." });
+        return;
+      }
+
+      const now = new Date().toISOString();
+      await usersCollection.updateOne(
+        { id: user.id },
+        {
+          $set: {
+            passwordHash: nextPasswordHash,
+            updatedAt: now,
+            resetPasswordHash: "",
+            resetPasswordExpiresAt: ""
+          }
+        }
+      );
+      await sessionsCollection.deleteMany({ userId: user.id });
+
+      res.json({
+        ok: true,
+        message: "Password reset successful. Please login with your new password."
+      });
+      return;
+    }
+
+    const result = withDb(function (db) {
+      const user = db.users.find(function (item) {
+        return item.email === email;
+      });
+      if (!user || !user.resetPasswordHash || !user.resetPasswordExpiresAt) {
+        return { invalidCode: true };
+      }
+      if (isExpiredIsoDate(user.resetPasswordExpiresAt)) {
+        return { invalidCode: true };
+      }
+      if (user.resetPasswordHash !== hashText(code)) {
+        return { invalidCode: true };
+      }
+      if (user.passwordHash === nextPasswordHash) {
+        return { samePassword: true };
+      }
+
+      user.passwordHash = nextPasswordHash;
+      user.updatedAt = new Date().toISOString();
+      user.resetPasswordHash = "";
+      user.resetPasswordExpiresAt = "";
+
+      db.sessions = db.sessions.filter(function (session) {
+        return session.userId !== user.id;
+      });
+
+      return { ok: true };
+    });
+
+    if (result.invalidCode) {
+      res.status(400).json({ message: invalidCodeMessage });
+      return;
+    }
+    if (result.samePassword) {
+      res.status(400).json({ message: "New password must be different from current password." });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      message: "Password reset successful. Please login with your new password."
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/api/user", requireAuth, function (req, res) {
@@ -908,41 +1388,131 @@ app.get("/api/user", requireAuth, function (req, res) {
   });
 });
 
-app.put("/api/user", requireAuth, function (req, res) {
-  const incomingData = req.body && req.body.data;
-  if (!incomingData || typeof incomingData !== "object") {
-    res.status(400).json({ message: "Request body must include a data object." });
-    return;
-  }
-
-  const updated = withDb(function (db) {
-    const user = db.users.find(function (item) {
-      return item.id === req.authUser.id;
-    });
-    if (!user) {
-      return null;
+app.put("/api/user", requireAuth, async function (req, res, next) {
+  try {
+    const incomingData = req.body && req.body.data;
+    if (!incomingData || typeof incomingData !== "object") {
+      res.status(400).json({ message: "Request body must include a data object." });
+      return;
     }
-    user.data = incomingData;
-    user.updatedAt = new Date().toISOString();
+    const hasEmailField = Boolean(req.body && Object.prototype.hasOwnProperty.call(req.body, "email"));
+    const hasProfileNameField = Boolean(req.body && Object.prototype.hasOwnProperty.call(req.body, "profileName"));
+    const nextEmail = hasEmailField ? normalizeEmail(req.body && req.body.email) : "";
+    const nextProfileName = hasProfileNameField
+      ? String((req.body && req.body.profileName) || "").trim()
+      : "";
 
-    db.sessions.forEach(function (session) {
-      if (session.token === req.sessionToken) {
-        session.lastSeenAt = new Date().toISOString();
+    if (hasEmailField && !isValidEmail(nextEmail)) {
+      res.status(400).json({ message: "A valid email is required." });
+      return;
+    }
+    if (hasEmailField) {
+      incomingData.email = nextEmail;
+    }
+    if (hasProfileNameField) {
+      incomingData.profileName = nextProfileName;
+    }
+
+    if (USE_MONGODB) {
+      const usersCollection = getMongoCollection(USERS_COLLECTION_NAME);
+      const sessionsCollection = getMongoCollection(SESSIONS_COLLECTION_NAME);
+      const now = new Date().toISOString();
+      const setPayload = {
+        data: incomingData,
+        updatedAt: now
+      };
+      if (hasEmailField) {
+        setPayload.email = nextEmail;
       }
+      if (hasProfileNameField) {
+        setPayload.profileName = nextProfileName;
+      }
+
+      let updateResult = null;
+      try {
+        updateResult = await usersCollection.updateOne(
+          { id: req.authUser.id },
+          {
+            $set: setPayload
+          }
+        );
+      } catch (error) {
+        if (isMongoDuplicateKeyError(error)) {
+          res.status(409).json({ message: "An account with this email already exists." });
+          return;
+        }
+        throw error;
+      }
+
+      if (!updateResult.matchedCount) {
+        res.status(404).json({ message: "User not found." });
+        return;
+      }
+
+      await sessionsCollection.updateOne(
+        { token: req.sessionToken },
+        {
+          $set: {
+            lastSeenAt: now
+          }
+        }
+      );
+
+      const user = await usersCollection.findOne({ id: req.authUser.id });
+      res.json({
+        user: sanitizeUser(user),
+        data: user && user.data ? user.data : incomingData
+      });
+      return;
+    }
+
+    const updated = withDb(function (db) {
+      const user = db.users.find(function (item) {
+        return item.id === req.authUser.id;
+      });
+      if (!user) {
+        return null;
+      }
+      if (hasEmailField && nextEmail !== user.email) {
+        const exists = db.users.some(function (item) {
+          return item.id !== user.id && item.email === nextEmail;
+        });
+        if (exists) {
+          return { error: "An account with this email already exists." };
+        }
+        user.email = nextEmail;
+      }
+      if (hasProfileNameField) {
+        user.profileName = nextProfileName;
+      }
+      user.data = incomingData;
+      user.updatedAt = new Date().toISOString();
+
+      db.sessions.forEach(function (session) {
+        if (session.token === req.sessionToken) {
+          session.lastSeenAt = new Date().toISOString();
+        }
+      });
+
+      return {
+        user: sanitizeUser(user),
+        data: user.data
+      };
     });
 
-    return {
-      user: sanitizeUser(user),
-      data: user.data
-    };
-  });
+    if (!updated) {
+      res.status(404).json({ message: "User not found." });
+      return;
+    }
+    if (updated.error) {
+      res.status(409).json({ message: updated.error });
+      return;
+    }
 
-  if (!updated) {
-    res.status(404).json({ message: "User not found." });
-    return;
+    res.json(updated);
+  } catch (error) {
+    next(error);
   }
-
-  res.json(updated);
 });
 
 app.post("/api/transactions/import/pdf", upload.single("statement"), async function (req, res) {
@@ -1157,10 +1727,26 @@ app.use(function (err, _req, res, _next) {
   res.status(500).json({ message: "Unexpected server error.", details: err ? err.message : "" });
 });
 
-ensureDbFile();
-app.listen(PORT, function () {
-  // eslint-disable-next-line no-console
-  console.log("NexSpend backend running on http://localhost:" + PORT);
-});
+async function startServer() {
+  try {
+    const storageMode = await initializeStorage();
+    app.listen(PORT, function () {
+      // eslint-disable-next-line no-console
+      console.log("NexSpend backend running on http://localhost:" + PORT);
+      // eslint-disable-next-line no-console
+      console.log(
+        storageMode === "mongo"
+          ? "Storage: MongoDB (" + MONGODB_DB_NAME + ")"
+          : "Storage: Local file (" + DB_PATH + ")"
+      );
+    });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error("Failed to start server:", error && error.message ? error.message : error);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 

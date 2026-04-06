@@ -43,7 +43,9 @@
   function normalizeUser(user) {
     var normalized = clone(user || {});
     normalized.transactions = Array.isArray(normalized.transactions) ? normalized.transactions : [];
-    normalized.categories = Array.isArray(normalized.categories) ? normalized.categories : clone(DEFAULT_CATEGORIES);
+    normalized.categories = Array.isArray(normalized.categories) && normalized.categories.length > 0
+      ? normalized.categories
+      : clone(DEFAULT_CATEGORIES);
     normalized.budgets = Array.isArray(normalized.budgets) ? normalized.budgets : [];
     normalized.reminders = Array.isArray(normalized.reminders) ? normalized.reminders : [];
     normalized.recurringRules = Array.isArray(normalized.recurringRules) ? normalized.recurringRules : [];
@@ -142,6 +144,42 @@
     return clone(users[userIndex]);
   }
 
+  function upsertUser(userData) {
+    var users = getUsers();
+    var incoming = normalizeUser(userData || {});
+    var lookupId = String(incoming.id || "").trim();
+    var lookupEmail = String(incoming.email || "").toLowerCase().trim();
+
+    var userIndex = users.findIndex(function (user) {
+      return (
+        (lookupId && String(user.id || "") === lookupId) ||
+        (lookupEmail && String(user.email || "").toLowerCase().trim() === lookupEmail)
+      );
+    });
+
+    if (userIndex === -1) {
+      if (!lookupId) {
+        incoming.id = createId("user");
+      }
+      users.push(incoming);
+      saveUsers(users);
+      return clone(incoming);
+    }
+
+    var existing = users[userIndex];
+    var merged = normalizeUser(Object.assign({}, existing, incoming));
+    merged.id = lookupId || existing.id || createId("user");
+    merged.email = lookupEmail || existing.email || "";
+    merged.passwordHash = incoming.passwordHash || existing.passwordHash || "";
+    merged.pinHash = incoming.pinHash || existing.pinHash || (merged.settings && merged.settings.pinHash) || "";
+    merged.settings = merged.settings || {};
+    merged.settings.pinHash = merged.settings.pinHash || merged.pinHash || "";
+
+    users[userIndex] = merged;
+    saveUsers(users);
+    return clone(merged);
+  }
+
   function replaceUser(userId, userData) {
     return updateUser(userId, function () {
       var next = normalizeUser(userData);
@@ -163,6 +201,7 @@
     findUserByEmail: findUserByEmail,
     createUser: createUser,
     updateUser: updateUser,
+    upsertUser: upsertUser,
     replaceUser: replaceUser,
     removeItemById: removeItemById,
     defaults: {

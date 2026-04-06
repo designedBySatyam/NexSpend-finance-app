@@ -27,6 +27,7 @@
     )
   ).replace(/\/+$/, "");
   var RUNTIME_API_BASE = BACKEND_API_BASE;
+  var protectedPromptState = null;
 
   var categoryKeywords = {
     expense: {
@@ -64,6 +65,10 @@
     dom.appView = byId("appView");
     dom.sectionNav = byId("sectionNav");
     dom.quickAddFab = byId("quickAddFab");
+    dom.sidebarUser = byId("sidebarUser");
+    dom.editProfileBtn = byId("editProfileBtn");
+    dom.userAvatar = byId("userAvatar");
+    dom.userNameBadge = byId("userNameBadge");
     dom.userBadge = byId("userBadge");
     dom.themeToggle = byId("themeToggle");
     dom.logoutBtn = byId("logoutBtn");
@@ -75,6 +80,7 @@
     dom.signupForm = byId("signupForm");
     dom.loginEmail = byId("loginEmail");
     dom.loginPassword = byId("loginPassword");
+    dom.forgotPasswordBtn = byId("forgotPasswordBtn");
     dom.signupEmail = byId("signupEmail");
     dom.signupPassword = byId("signupPassword");
     dom.signupPin = byId("signupPin");
@@ -170,6 +176,32 @@
     dom.importTransactionsInput = byId("importTransactionsInput");
     dom.importPdfInput = byId("importPdfInput");
     dom.exportMessage = byId("exportMessage");
+    dom.profileModal = byId("profileModal");
+    dom.profileForm = byId("profileForm");
+    dom.profileNameInput = byId("profileNameInput");
+    dom.profileEmailInput = byId("profileEmailInput");
+    dom.profileFormMessage = byId("profileFormMessage");
+    dom.changePasswordForm = byId("changePasswordForm");
+    dom.currentPasswordInput = byId("currentPasswordInput");
+    dom.newPasswordInput = byId("newPasswordInput");
+    dom.confirmPasswordInput = byId("confirmPasswordInput");
+    dom.changePasswordMessage = byId("changePasswordMessage");
+    dom.forgotPasswordModal = byId("forgotPasswordModal");
+    dom.forgotPasswordForm = byId("forgotPasswordForm");
+    dom.forgotPasswordEmailInput = byId("forgotPasswordEmailInput");
+    dom.requestResetCodeBtn = byId("requestResetCodeBtn");
+    dom.forgotPasswordCodeHint = byId("forgotPasswordCodeHint");
+    dom.forgotPasswordCodeInput = byId("forgotPasswordCodeInput");
+    dom.forgotPasswordNewPasswordInput = byId("forgotPasswordNewPasswordInput");
+    dom.forgotPasswordConfirmPasswordInput = byId("forgotPasswordConfirmPasswordInput");
+    dom.forgotPasswordMessage = byId("forgotPasswordMessage");
+    dom.protectedPromptModal = byId("protectedPromptModal");
+    dom.protectedPromptForm = byId("protectedPromptForm");
+    dom.protectedPromptTitle = byId("protectedPromptTitle");
+    dom.protectedPromptMessage = byId("protectedPromptMessage");
+    dom.protectedPromptInput = byId("protectedPromptInput");
+    dom.protectedPromptError = byId("protectedPromptError");
+    dom.protectedPromptOkBtn = byId("protectedPromptOkBtn");
 
     dom.sectionButtons = Array.prototype.slice.call(document.querySelectorAll(".section-nav-btn"));
     dom.appSections = Array.prototype.slice.call(document.querySelectorAll("[data-app-section]"));
@@ -185,10 +217,16 @@
     dom.loginForm.addEventListener("submit", handleLogin);
     dom.signupForm.addEventListener("submit", handleSignup);
     dom.pinUnlockForm.addEventListener("submit", handlePinUnlock);
+    if (dom.forgotPasswordBtn) {
+      dom.forgotPasswordBtn.addEventListener("click", openForgotPasswordModal);
+    }
 
     dom.themeToggle.addEventListener("click", toggleTheme);
     dom.logoutBtn.addEventListener("click", handleLogout);
     dom.lockBtn.addEventListener("click", handleLock);
+    if (dom.editProfileBtn) {
+      dom.editProfileBtn.addEventListener("click", openProfileModal);
+    }
     if (dom.sectionNav) {
       dom.sectionNav.addEventListener("click", handleSectionNavClick);
     }
@@ -230,6 +268,24 @@
     if (dom.transactionRecordModal) {
       dom.transactionRecordModal.addEventListener("click", handleTransactionRecordModalClick);
     }
+    if (dom.profileModal) {
+      dom.profileModal.addEventListener("click", handleProfileModalClick);
+    }
+    if (dom.profileForm) {
+      dom.profileForm.addEventListener("submit", handleProfileFormSubmit);
+    }
+    if (dom.changePasswordForm) {
+      dom.changePasswordForm.addEventListener("submit", handleChangePasswordFormSubmit);
+    }
+    if (dom.forgotPasswordModal) {
+      dom.forgotPasswordModal.addEventListener("click", handleForgotPasswordModalClick);
+    }
+    if (dom.forgotPasswordForm) {
+      dom.forgotPasswordForm.addEventListener("submit", handleForgotPasswordFormSubmit);
+    }
+    if (dom.requestResetCodeBtn) {
+      dom.requestResetCodeBtn.addEventListener("click", handleRequestPasswordResetCode);
+    }
     dom.categoriesList.addEventListener("click", handleCategoriesListClick);
     dom.accountsList.addEventListener("click", handleAccountsListClick);
     dom.budgetsList.addEventListener("click", handleBudgetsListClick);
@@ -250,6 +306,12 @@
     if (dom.importPdfInput) {
       dom.importPdfInput.addEventListener("change", importTransactionsFromPdfFile);
     }
+    if (dom.protectedPromptForm) {
+      dom.protectedPromptForm.addEventListener("submit", handleProtectedPromptSubmit);
+    }
+    if (dom.protectedPromptModal) {
+      dom.protectedPromptModal.addEventListener("click", handleProtectedPromptModalClick);
+    }
     document.addEventListener("keydown", handleGlobalKeyDown);
   }
 
@@ -268,10 +330,10 @@
     setAuthMessage("");
   }
 
-  function handleLogin(event) {
+  async function handleLogin(event) {
     event.preventDefault();
     try {
-      window.AuthService.login({
+      await window.AuthService.login({
         email: dom.loginEmail.value,
         password: dom.loginPassword.value
       });
@@ -283,10 +345,10 @@
     }
   }
 
-  function handleSignup(event) {
+  async function handleSignup(event) {
     event.preventDefault();
     try {
-      window.AuthService.signup({
+      await window.AuthService.signup({
         email: dom.signupEmail.value,
         password: dom.signupPassword.value,
         pin: dom.signupPin.value
@@ -354,6 +416,24 @@
     populateDropdowns();
     setActiveSection(state.activeSection || "overview");
     renderAll();
+    refreshCurrentUserFromBackendSilently();
+  }
+
+  function refreshCurrentUserFromBackendSilently() {
+    if (!window.AuthService || typeof window.AuthService.refreshCurrentUserFromBackend !== "function") {
+      return;
+    }
+    window.AuthService.refreshCurrentUserFromBackend()
+      .then(function (refreshedUser) {
+        if (!refreshedUser) {
+          return;
+        }
+        state.user = refreshedUser;
+        renderAll();
+      })
+      .catch(function () {
+        return null;
+      });
   }
 
   function handleSectionNavClick(event) {
@@ -418,6 +498,10 @@
     if (!isApp) {
       closeAllTransactionsModal();
       closeTransactionRecord();
+      closeProfileModal();
+    }
+    if (!isAuth) {
+      closeForgotPasswordModal();
     }
     dom.authView.classList.toggle("hidden", !isAuth);
     dom.pinUnlockView.classList.toggle("hidden", !isPin);
@@ -426,7 +510,9 @@
       dom.sectionNav.classList.toggle("hidden", !isApp);
     }
     dom.logoutBtn.classList.toggle("hidden", !isApp);
-    dom.userBadge.classList.toggle("hidden", !isApp);
+    if (dom.editProfileBtn) {
+      dom.editProfileBtn.classList.toggle("hidden", !isApp);
+    }
     dom.lockBtn.classList.toggle("hidden", !isApp || !hasPinConfigured());
     updateQuickAddVisibility();
   }
@@ -455,9 +541,39 @@
   }
 
   function renderUserHeader() {
+    var displayName = getUserDisplayName(state.user);
+    dom.userNameBadge.textContent = displayName;
     dom.userBadge.textContent = state.user.email;
+    dom.userAvatar.textContent = getUserInitials(displayName, state.user.email);
     dom.defaultCurrency.value = state.user.settings && state.user.settings.currency ? state.user.settings.currency : "INR";
     dom.lockBtn.classList.toggle("hidden", !hasPinConfigured());
+  }
+
+  function getUserDisplayName(user) {
+    var custom = String(user && user.profileName ? user.profileName : "").trim();
+    if (custom) {
+      return custom;
+    }
+    var email = String(user && user.email ? user.email : "").trim();
+    if (!email) {
+      return "Profile";
+    }
+    return email.split("@")[0] || email;
+  }
+
+  function getUserInitials(displayName, email) {
+    var label = String(displayName || "").trim();
+    if (!label) {
+      label = String(email || "").trim().split("@")[0] || "";
+    }
+    if (!label) {
+      return "--";
+    }
+    var words = label.replace(/[^a-zA-Z0-9 ]+/g, " ").trim().split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+      return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+    }
+    return label.slice(0, 2).toUpperCase();
   }
 
   function handleTransactionSubmit(event) {
@@ -613,7 +729,10 @@
   function syncBodyModalState() {
     var hasAllTransactionsModal = dom.allTransactionsModal && !dom.allTransactionsModal.classList.contains("hidden");
     var hasRecordModal = dom.transactionRecordModal && !dom.transactionRecordModal.classList.contains("hidden");
-    document.body.classList.toggle("modal-open", Boolean(hasAllTransactionsModal || hasRecordModal));
+    var hasProfileModal = dom.profileModal && !dom.profileModal.classList.contains("hidden");
+    var hasForgotPasswordModal = dom.forgotPasswordModal && !dom.forgotPasswordModal.classList.contains("hidden");
+    var hasProtectedPromptModal = dom.protectedPromptModal && !dom.protectedPromptModal.classList.contains("hidden");
+    document.body.classList.toggle("modal-open", Boolean(hasAllTransactionsModal || hasRecordModal || hasProfileModal || hasForgotPasswordModal || hasProtectedPromptModal));
   }
 
   function handleTransactionRecordModalClick(event) {
@@ -644,6 +763,18 @@
 
   function handleGlobalKeyDown(event) {
     if (event.key !== "Escape") {
+      return;
+    }
+    if (dom.protectedPromptModal && !dom.protectedPromptModal.classList.contains("hidden")) {
+      closeProtectedPromptModal(null);
+      return;
+    }
+    if (dom.forgotPasswordModal && !dom.forgotPasswordModal.classList.contains("hidden")) {
+      closeForgotPasswordModal();
+      return;
+    }
+    if (dom.profileModal && !dom.profileModal.classList.contains("hidden")) {
+      closeProfileModal();
       return;
     }
     if (dom.transactionRecordModal && !dom.transactionRecordModal.classList.contains("hidden")) {
@@ -733,6 +864,390 @@
       dom.transactionRecordBody.innerHTML = "";
     }
     syncBodyModalState();
+  }
+
+  function handleProfileModalClick(event) {
+    var actionButton = event.target.closest("[data-action]");
+    if (!actionButton || !dom.profileModal || !dom.profileModal.contains(actionButton)) {
+      return;
+    }
+    if (actionButton.getAttribute("data-action") === "close-profile-modal") {
+      closeProfileModal();
+    }
+  }
+
+  function openProfileModal() {
+    if (!state.user || !dom.profileModal || !dom.profileForm) {
+      return;
+    }
+    dom.profileNameInput.value = String(state.user.profileName || "").trim();
+    dom.profileEmailInput.value = String(state.user.email || "").trim();
+    setProfileFormMessage("", false);
+    setChangePasswordMessage("", false);
+    if (dom.changePasswordForm) {
+      dom.changePasswordForm.reset();
+    }
+
+    dom.profileModal.classList.remove("hidden");
+    dom.profileModal.setAttribute("aria-hidden", "false");
+    syncBodyModalState();
+
+    requestAnimationFrame(function () {
+      dom.profileNameInput.focus();
+      if (dom.profileNameInput.value) {
+        dom.profileNameInput.select();
+      }
+    });
+  }
+
+  function closeProfileModal() {
+    if (!dom.profileModal) {
+      return;
+    }
+    dom.profileModal.classList.add("hidden");
+    dom.profileModal.setAttribute("aria-hidden", "true");
+    if (dom.profileForm) {
+      dom.profileForm.reset();
+    }
+    setProfileFormMessage("", false);
+    setChangePasswordMessage("", false);
+    if (dom.changePasswordForm) {
+      dom.changePasswordForm.reset();
+    }
+    syncBodyModalState();
+  }
+
+  function handleProfileFormSubmit(event) {
+    event.preventDefault();
+    if (!state.user) {
+      return;
+    }
+
+    var profileName = String(dom.profileNameInput.value || "").trim();
+    var nextEmail = String(dom.profileEmailInput.value || "").trim().toLowerCase();
+
+    if (!nextEmail) {
+      setProfileFormMessage("Email is required.", true);
+      return;
+    }
+    if (!isValidEmailAddress(nextEmail)) {
+      setProfileFormMessage("Enter a valid email address.", true);
+      return;
+    }
+
+    try {
+      updateUser(function (user) {
+        var existing = window.FinanceStorage.findUserByEmail(nextEmail);
+        if (existing && existing.id !== user.id) {
+          throw new Error("Another account already uses this email.");
+        }
+        user.profileName = profileName;
+        user.email = nextEmail;
+        user.updatedAt = new Date().toISOString();
+        return user;
+      }, false);
+
+      state.user = window.AuthService.getCurrentUser();
+      renderUserHeader();
+      closeProfileModal();
+      setAppMessage("Profile updated successfully.", false);
+    } catch (error) {
+      setProfileFormMessage(error.message, true);
+    }
+  }
+
+  function setProfileFormMessage(message, isError) {
+    if (!dom.profileFormMessage) {
+      return;
+    }
+    dom.profileFormMessage.textContent = message || "";
+    dom.profileFormMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
+  }
+
+  async function handleChangePasswordFormSubmit(event) {
+    event.preventDefault();
+    if (!state.user) {
+      return;
+    }
+
+    var currentPassword = String(dom.currentPasswordInput.value || "");
+    var newPassword = String(dom.newPasswordInput.value || "");
+    var confirmPassword = String(dom.confirmPasswordInput.value || "");
+
+    if (!currentPassword.trim()) {
+      setChangePasswordMessage("Current password is required.", true);
+      return;
+    }
+    if (newPassword.trim().length < 6) {
+      setChangePasswordMessage("New password must be at least 6 characters.", true);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setChangePasswordMessage("New password and confirm password do not match.", true);
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setChangePasswordMessage("New password must be different from current password.", true);
+      return;
+    }
+
+    try {
+      await window.AuthService.changePassword({
+        currentPassword: currentPassword,
+        newPassword: newPassword
+      });
+      dom.changePasswordForm.reset();
+      setChangePasswordMessage("Password changed successfully.", false);
+      setAppMessage("Password changed successfully.", false);
+    } catch (error) {
+      setChangePasswordMessage(error.message || "Could not change password.", true);
+    }
+  }
+
+  function setChangePasswordMessage(message, isError) {
+    if (!dom.changePasswordMessage) {
+      return;
+    }
+    dom.changePasswordMessage.textContent = message || "";
+    dom.changePasswordMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
+  }
+
+  function openForgotPasswordModal() {
+    if (!dom.forgotPasswordModal || !dom.forgotPasswordForm) {
+      return;
+    }
+    dom.forgotPasswordForm.reset();
+    setForgotPasswordMessage("", false);
+    setForgotPasswordCodeHint("", false);
+    var loginEmail = String((dom.loginEmail && dom.loginEmail.value) || "").trim().toLowerCase();
+    if (loginEmail) {
+      dom.forgotPasswordEmailInput.value = loginEmail;
+    }
+
+    dom.forgotPasswordModal.classList.remove("hidden");
+    dom.forgotPasswordModal.setAttribute("aria-hidden", "false");
+    syncBodyModalState();
+
+    requestAnimationFrame(function () {
+      if (dom.forgotPasswordEmailInput) {
+        dom.forgotPasswordEmailInput.focus();
+      }
+    });
+  }
+
+  function closeForgotPasswordModal() {
+    if (!dom.forgotPasswordModal) {
+      return;
+    }
+    dom.forgotPasswordModal.classList.add("hidden");
+    dom.forgotPasswordModal.setAttribute("aria-hidden", "true");
+    if (dom.forgotPasswordForm) {
+      dom.forgotPasswordForm.reset();
+    }
+    setForgotPasswordMessage("", false);
+    setForgotPasswordCodeHint("", false);
+    syncBodyModalState();
+  }
+
+  function handleForgotPasswordModalClick(event) {
+    var actionButton = event.target.closest("[data-action]");
+    if (!actionButton || !dom.forgotPasswordModal || !dom.forgotPasswordModal.contains(actionButton)) {
+      return;
+    }
+    if (actionButton.getAttribute("data-action") === "close-forgot-password-modal") {
+      closeForgotPasswordModal();
+    }
+  }
+
+  async function handleRequestPasswordResetCode() {
+    var email = String(dom.forgotPasswordEmailInput.value || "").trim().toLowerCase();
+    if (!email) {
+      setForgotPasswordMessage("Email is required.", true);
+      return;
+    }
+    if (!isValidEmailAddress(email)) {
+      setForgotPasswordMessage("Enter a valid email address.", true);
+      return;
+    }
+
+    try {
+      setForgotPasswordMessage("Requesting reset code...", false);
+      var result = await window.AuthService.requestPasswordReset(email);
+      var hint = result && result.message ? result.message : "If account exists, a reset code has been generated.";
+      if (result && result.resetCode) {
+        hint += " Code: " + result.resetCode;
+      }
+      if (result && result.expiresAt) {
+        hint += " (expires " + formatDateTime(result.expiresAt) + ")";
+      }
+      setForgotPasswordCodeHint(hint, false);
+      setForgotPasswordMessage("Reset code ready. Enter code and new password.", false);
+      if (dom.forgotPasswordCodeInput) {
+        dom.forgotPasswordCodeInput.focus();
+      }
+    } catch (error) {
+      setForgotPasswordMessage(error.message || "Could not request reset code.", true);
+    }
+  }
+
+  async function handleForgotPasswordFormSubmit(event) {
+    event.preventDefault();
+    var email = String(dom.forgotPasswordEmailInput.value || "").trim().toLowerCase();
+    var code = String(dom.forgotPasswordCodeInput.value || "").trim();
+    var newPassword = String(dom.forgotPasswordNewPasswordInput.value || "");
+    var confirmPassword = String(dom.forgotPasswordConfirmPasswordInput.value || "");
+
+    if (!email || !isValidEmailAddress(email)) {
+      setForgotPasswordMessage("Enter a valid email address.", true);
+      return;
+    }
+    if (!code) {
+      setForgotPasswordMessage("Reset code is required.", true);
+      return;
+    }
+    if (newPassword.trim().length < 6) {
+      setForgotPasswordMessage("New password must be at least 6 characters.", true);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setForgotPasswordMessage("New password and confirm password do not match.", true);
+      return;
+    }
+
+    try {
+      await window.AuthService.confirmPasswordReset({
+        email: email,
+        code: code,
+        newPassword: newPassword
+      });
+      closeForgotPasswordModal();
+      switchAuthTab("login");
+      if (dom.loginEmail) {
+        dom.loginEmail.value = email;
+      }
+      if (dom.loginPassword) {
+        dom.loginPassword.focus();
+      }
+      setAuthMessage("Password reset successful. Please login with your new password.", false);
+    } catch (error) {
+      setForgotPasswordMessage(error.message || "Could not reset password.", true);
+    }
+  }
+
+  function setForgotPasswordMessage(message, isError) {
+    if (!dom.forgotPasswordMessage) {
+      return;
+    }
+    dom.forgotPasswordMessage.textContent = message || "";
+    dom.forgotPasswordMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
+  }
+
+  function setForgotPasswordCodeHint(message, isError) {
+    if (!dom.forgotPasswordCodeHint) {
+      return;
+    }
+    dom.forgotPasswordCodeHint.textContent = message || "";
+    dom.forgotPasswordCodeHint.style.color = isError ? "var(--danger)" : "var(--muted)";
+  }
+
+  function handleProtectedPromptModalClick(event) {
+    var actionButton = event.target.closest("[data-action]");
+    if (!actionButton || !dom.protectedPromptModal || !dom.protectedPromptModal.contains(actionButton)) {
+      return;
+    }
+    var action = actionButton.getAttribute("data-action");
+    if (action === "close-protected-prompt") {
+      closeProtectedPromptModal(null);
+    }
+  }
+
+  function handleProtectedPromptSubmit(event) {
+    event.preventDefault();
+    if (!protectedPromptState) {
+      return;
+    }
+    var entered = String(dom.protectedPromptInput ? dom.protectedPromptInput.value : "").trim();
+    if (typeof protectedPromptState.validate === "function") {
+      var validationMessage = protectedPromptState.validate(entered);
+      if (validationMessage) {
+        if (dom.protectedPromptError) {
+          dom.protectedPromptError.textContent = validationMessage;
+        }
+        if (dom.protectedPromptInput) {
+          dom.protectedPromptInput.focus();
+          dom.protectedPromptInput.select();
+        }
+        return;
+      }
+    }
+    closeProtectedPromptModal(entered);
+  }
+
+  function openProtectedPromptModal(options) {
+    if (!dom.protectedPromptModal || !dom.protectedPromptForm || !dom.protectedPromptInput) {
+      return Promise.resolve(null);
+    }
+
+    closeProtectedPromptModal(null);
+
+    var config = options || {};
+    dom.protectedPromptTitle.textContent = config.title || "Enter Password";
+    dom.protectedPromptMessage.textContent = config.message || "Enter password to continue.";
+    dom.protectedPromptInput.value = config.defaultValue || "";
+    dom.protectedPromptInput.placeholder = config.placeholder || "";
+    dom.protectedPromptInput.autocomplete = config.autocomplete || "off";
+    dom.protectedPromptInput.required = true;
+    if (dom.protectedPromptOkBtn) {
+      dom.protectedPromptOkBtn.textContent = config.confirmLabel || "OK";
+    }
+    if (dom.protectedPromptError) {
+      dom.protectedPromptError.textContent = "";
+    }
+
+    dom.protectedPromptModal.classList.remove("hidden");
+    dom.protectedPromptModal.setAttribute("aria-hidden", "false");
+    syncBodyModalState();
+
+    requestAnimationFrame(function () {
+      dom.protectedPromptInput.focus();
+      if (dom.protectedPromptInput.value) {
+        dom.protectedPromptInput.select();
+      }
+    });
+
+    return new Promise(function (resolve) {
+      protectedPromptState = {
+        resolve: resolve,
+        validate: config.validate
+      };
+    });
+  }
+
+  function closeProtectedPromptModal(value) {
+    if (!dom.protectedPromptModal) {
+      if (protectedPromptState && typeof protectedPromptState.resolve === "function") {
+        protectedPromptState.resolve(value);
+      }
+      protectedPromptState = null;
+      return;
+    }
+
+    if (!dom.protectedPromptModal.classList.contains("hidden")) {
+      dom.protectedPromptModal.classList.add("hidden");
+      dom.protectedPromptModal.setAttribute("aria-hidden", "true");
+    }
+    if (dom.protectedPromptError) {
+      dom.protectedPromptError.textContent = "";
+    }
+    if (dom.protectedPromptForm) {
+      dom.protectedPromptForm.reset();
+    }
+    syncBodyModalState();
+
+    if (protectedPromptState && typeof protectedPromptState.resolve === "function") {
+      protectedPromptState.resolve(value);
+    }
+    protectedPromptState = null;
   }
 
   function openTransactionEditor(transactionId) {
@@ -1637,7 +2152,7 @@
       return;
     }
 
-    var password = promptForProtectedExportPassword("CSV");
+    var password = await promptForProtectedExportPassword("CSV");
     if (!password) {
       return;
     }
@@ -1768,7 +2283,7 @@
       return;
     }
 
-    var password = promptForProtectedExportPassword("PDF");
+    var password = await promptForProtectedExportPassword("PDF");
     if (!password) {
       return;
     }
@@ -1814,19 +2329,25 @@
     });
   }
 
-  function promptForProtectedExportPassword(fileTypeLabel) {
-    var passwordInput = window.prompt("Set a password for " + fileTypeLabel + " export (minimum 4 characters):", "");
-    if (passwordInput == null) {
-      setAppMessage("Export cancelled.", true);
-      return "";
-    }
-    var password = String(passwordInput || "").trim();
+  async function promptForProtectedExportPassword(fileTypeLabel) {
+    var password = await openProtectedPromptModal({
+      title: "Protected " + fileTypeLabel + " Export",
+      message: "Set a password for " + fileTypeLabel + " export (minimum 4 characters).",
+      placeholder: "Enter password",
+      confirmLabel: "Export",
+      autocomplete: "new-password",
+      validate: function (value) {
+        if (!value) {
+          return "Password is required for protected export.";
+        }
+        if (value.length < 4) {
+          return "Password must be at least 4 characters.";
+        }
+        return "";
+      }
+    });
     if (!password) {
-      setAppMessage("Password is required for protected export.", true);
-      return "";
-    }
-    if (password.length < 4) {
-      setAppMessage("Password must be at least 4 characters.", true);
+      setAppMessage("Export cancelled.", true);
       return "";
     }
     return password;
@@ -1937,9 +2458,21 @@
       var latestError = firstError;
       for (var attempt = 1; attempt <= 2; attempt += 1) {
         var promptMessage = latestError.code === "PDF_PASSWORD_INVALID"
-          ? "Incorrect PDF password. Please enter the correct password:"
-          : "This PDF is password-protected. Enter PDF password:";
-        var password = window.prompt(promptMessage, "");
+          ? "Incorrect PDF password. Please enter the correct password."
+          : "This PDF is password-protected. Enter PDF password.";
+        var password = await openProtectedPromptModal({
+          title: "PDF Password Required",
+          message: promptMessage,
+          placeholder: "Enter PDF password",
+          confirmLabel: "Continue",
+          autocomplete: "current-password",
+          validate: function (value) {
+            if (!value) {
+              return "PDF password is required.";
+            }
+            return "";
+          }
+        });
         if (password == null) {
           throw new Error("Import cancelled. PDF password was not provided.");
         }
@@ -2090,7 +2623,7 @@
       return;
     }
 
-    var password = promptForProtectedExportPassword("Summary PDF");
+    var password = await promptForProtectedExportPassword("Summary PDF");
     if (!password) {
       return;
     }
@@ -2935,6 +3468,10 @@
       .filter(function (tag, index, list) {
         return tag && list.indexOf(tag) === index;
       });
+  }
+
+  function isValidEmailAddress(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
   }
 
   function toDateInputValue(date) {

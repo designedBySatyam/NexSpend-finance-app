@@ -54,6 +54,9 @@
             <label for="loginPassword">Password</label>
             <input id="loginPassword" type="password" required minlength="6" placeholder="Min. 6 characters" autocomplete="current-password">
           </div>
+          <div class="auth-aux-row">
+            <button id="forgotPasswordBtn" class="auth-inline-link" type="button">Forgot password?</button>
+          </div>
           <button class="btn btn-primary btn-block" type="submit">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
             Sign In
@@ -210,8 +213,14 @@
         <!-- sidebar footer -->
         <div class="sidebar-footer">
           <div class="sidebar-user" id="sidebarUser">
-            <div class="sidebar-avatar" id="userAvatar">—</div>
-            <span id="userBadge" class="sidebar-email hidden"></span>
+            <button id="editProfileBtn" class="sidebar-profile-btn hidden" type="button" title="Edit profile">
+              <div class="sidebar-avatar" id="userAvatar">--</div>
+              <div class="sidebar-user-meta">
+                <span id="userNameBadge" class="sidebar-name">Profile</span>
+                <span id="userBadge" class="sidebar-email">user@example.com</span>
+              </div>
+              <span class="sidebar-profile-edit-text">Edit</span>
+            </button>
           </div>
           <div class="sidebar-controls">
             <button id="themeToggle" class="btn btn-icon hidden" type="button" title="Toggle theme">
@@ -838,6 +847,149 @@
   </div>
 
   <!-- ─── SCRIPTS ───────────────────────────────────────────────────────────── -->
+  <!-- Profile Modal -->
+  <div id="profileModal" class="record-modal hidden" aria-hidden="true">
+    <button class="record-modal-backdrop" type="button" data-action="close-profile-modal" aria-label="Close profile"></button>
+    <section class="record-modal-card profile-modal-card" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+      <div class="record-modal-head">
+        <div class="record-modal-heading">
+          <p class="record-modal-kicker">Account</p>
+          <h3 id="profileModalTitle" class="record-modal-title">Edit Profile</h3>
+          <p class="record-modal-meta">Update your public name and login email.</p>
+        </div>
+        <button class="record-modal-close" type="button" data-action="close-profile-modal" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <form id="profileForm" class="profile-form">
+        <div class="field">
+          <label for="profileNameInput">Display Name</label>
+          <input id="profileNameInput" type="text" maxlength="60" placeholder="Enter your name">
+        </div>
+        <div class="field">
+          <label for="profileEmailInput">Email</label>
+          <input id="profileEmailInput" type="email" required placeholder="you@example.com" autocomplete="email">
+        </div>
+        <p id="profileFormMessage" class="status-text profile-form-message"></p>
+        <div class="record-actions">
+          <button class="btn btn-ghost" type="button" data-action="close-profile-modal">Cancel</button>
+          <button id="saveProfileBtn" class="btn btn-primary" type="submit">Save Profile</button>
+        </div>
+      </form>
+
+      <div class="profile-section-divider"></div>
+
+      <form id="changePasswordForm" class="profile-form profile-password-form">
+        <p class="profile-subtitle">Change Password</p>
+        <div class="field">
+          <label for="currentPasswordInput">Current Password</label>
+          <input id="currentPasswordInput" type="password" minlength="6" autocomplete="current-password" placeholder="Enter current password" required>
+        </div>
+        <div class="field">
+          <label for="newPasswordInput">New Password</label>
+          <input id="newPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Min. 6 characters" required>
+        </div>
+        <div class="field">
+          <label for="confirmPasswordInput">Confirm New Password</label>
+          <input id="confirmPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Re-enter new password" required>
+        </div>
+        <p id="changePasswordMessage" class="status-text profile-form-message"></p>
+        <div class="record-actions">
+          <button id="changePasswordBtn" class="btn btn-primary" type="submit">Change Password</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  <!-- Forgot Password Modal -->
+  <div id="forgotPasswordModal" class="record-modal hidden" aria-hidden="true">
+    <button class="record-modal-backdrop" type="button" data-action="close-forgot-password-modal" aria-label="Close forgot password"></button>
+    <section class="record-modal-card profile-modal-card forgot-password-modal-card" role="dialog" aria-modal="true" aria-labelledby="forgotPasswordModalTitle">
+      <div class="record-modal-head">
+        <div class="record-modal-heading">
+          <p class="record-modal-kicker">Recovery</p>
+          <h3 id="forgotPasswordModalTitle" class="record-modal-title">Forgot Password</h3>
+          <p class="record-modal-meta">Request reset code and set a new password.</p>
+        </div>
+        <button class="record-modal-close" type="button" data-action="close-forgot-password-modal" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <form id="forgotPasswordForm" class="profile-form">
+        <div class="field">
+          <label for="forgotPasswordEmailInput">Email</label>
+          <input id="forgotPasswordEmailInput" type="email" required placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div class="record-actions forgot-password-actions">
+          <button id="requestResetCodeBtn" class="btn btn-ghost" type="button">Get Reset Code</button>
+        </div>
+        <p id="forgotPasswordCodeHint" class="status-text profile-form-message"></p>
+        <div class="field">
+          <label for="forgotPasswordCodeInput">Reset Code</label>
+          <input id="forgotPasswordCodeInput" type="text" inputmode="numeric" maxlength="10" placeholder="Enter reset code" required>
+        </div>
+        <div class="field">
+          <label for="forgotPasswordNewPasswordInput">New Password</label>
+          <input id="forgotPasswordNewPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Min. 6 characters" required>
+        </div>
+        <div class="field">
+          <label for="forgotPasswordConfirmPasswordInput">Confirm New Password</label>
+          <input id="forgotPasswordConfirmPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Re-enter new password" required>
+        </div>
+        <p id="forgotPasswordMessage" class="status-text profile-form-message"></p>
+        <div class="record-actions">
+          <button class="btn btn-ghost" type="button" data-action="close-forgot-password-modal">Cancel</button>
+          <button id="submitForgotPasswordBtn" class="btn btn-primary" type="submit">Reset Password</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  <!-- Protected Password Prompt Modal -->
+  <div id="protectedPromptModal" class="protected-prompt-modal hidden" aria-hidden="true">
+    <button
+      class="protected-prompt-backdrop"
+      type="button"
+      data-action="close-protected-prompt"
+      aria-label="Close password prompt"
+    ></button>
+    <section
+      class="protected-prompt-card"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="protectedPromptTitle"
+      aria-describedby="protectedPromptMessage"
+    >
+      <div class="protected-prompt-head">
+        <h3 id="protectedPromptTitle" class="protected-prompt-title">Enter Password</h3>
+        <p id="protectedPromptMessage" class="protected-prompt-message">
+          Enter password to continue.
+        </p>
+      </div>
+      <form id="protectedPromptForm" class="protected-prompt-form">
+        <label for="protectedPromptInput" class="protected-prompt-label">Password</label>
+        <input
+          id="protectedPromptInput"
+          class="protected-prompt-input"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          required
+        >
+        <p id="protectedPromptError" class="protected-prompt-error" aria-live="polite"></p>
+        <div class="protected-prompt-actions">
+          <button
+            id="protectedPromptCancelBtn"
+            class="btn btn-ghost"
+            type="button"
+            data-action="close-protected-prompt"
+          >
+            Cancel
+          </button>
+          <button id="protectedPromptOkBtn" class="btn btn-primary" type="submit">OK</button>
+        </div>
+      </form>
+    </section>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="./js/storage.js"></script>
@@ -869,24 +1021,8 @@
           if (window.innerWidth < 900) closeSidebar();
         });
       });
-
-      // Sync user avatar initials
-      var origShow = window.AuthService;
-      var observer = new MutationObserver(function() {
-        var badge = document.getElementById('userBadge');
-        var avatar = document.getElementById('userAvatar');
-        if (badge && avatar && badge.textContent) {
-          var email = badge.textContent.trim();
-          avatar.textContent = email ? email.slice(0,2).toUpperCase() : '--';
-        }
-      });
-      var badge = document.getElementById('userBadge');
-      if (badge) observer.observe(badge, { childList: true, characterData: true, subtree: true });
     })();
   </script>
 </body>
 </html>
-
-
-
 
