@@ -18,6 +18,15 @@
 
   var dom = {};
   var AUTO_CATEGORY_VALUE = "auto_detect";
+  var BACKEND_API_BASE = String(
+    window.NEXSPEND_API_BASE ||
+    (
+      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+        ? "http://localhost:4000/api"
+        : window.location.origin + "/api"
+    )
+  ).replace(/\/+$/, "");
+  var RUNTIME_API_BASE = BACKEND_API_BASE;
 
   var categoryKeywords = {
     expense: {
@@ -154,9 +163,12 @@
     dom.insightsList = byId("insightsList");
 
     dom.exportCsvBtn = byId("exportCsvBtn");
+    dom.exportTransactionsPdfBtn = byId("exportTransactionsPdfBtn");
     dom.exportPdfBtn = byId("exportPdfBtn");
     dom.backupBtn = byId("backupBtn");
     dom.restoreInput = byId("restoreInput");
+    dom.importTransactionsInput = byId("importTransactionsInput");
+    dom.importPdfInput = byId("importPdfInput");
     dom.exportMessage = byId("exportMessage");
 
     dom.sectionButtons = Array.prototype.slice.call(document.querySelectorAll(".section-nav-btn"));
@@ -226,9 +238,18 @@
     dom.recurringList.addEventListener("click", handleRecurringListClick);
 
     dom.exportCsvBtn.addEventListener("click", exportTransactionsCsv);
+    if (dom.exportTransactionsPdfBtn) {
+      dom.exportTransactionsPdfBtn.addEventListener("click", exportTransactionsPdf);
+    }
     dom.exportPdfBtn.addEventListener("click", exportSummaryPdf);
     dom.backupBtn.addEventListener("click", backupUserData);
     dom.restoreInput.addEventListener("change", restoreUserDataFromFile);
+    if (dom.importTransactionsInput) {
+      dom.importTransactionsInput.addEventListener("change", importTransactionsFromCsvFile);
+    }
+    if (dom.importPdfInput) {
+      dom.importPdfInput.addEventListener("change", importTransactionsFromPdfFile);
+    }
     document.addEventListener("keydown", handleGlobalKeyDown);
   }
 
@@ -1609,65 +1630,506 @@
     return { labels: labels, values: values };
   }
 
-  function exportTransactionsCsv() {
+  async function exportTransactionsCsv() {
     var transactions = getTransactionsSorted(state.user.transactions);
     if (transactions.length === 0) {
       setAppMessage("No transactions available to export.", true);
       return;
     }
-    var rows = [["id", "date", "type", "amount", "category", "account", "tags", "notes"]];
-    transactions.forEach(function (transaction) {
-      rows.push([
-        transaction.id,
-        transaction.date,
-        transaction.type,
-        toAmount(transaction.amount).toFixed(2),
-        getCategoryName(transaction.categoryId),
-        getAccountName(transaction.accountId),
-        (transaction.tags || []).join("|"),
-        transaction.notes || ""
-      ]);
-    });
-    var csvText = rows.map(function (row) {
-      return row.map(csvCell).join(",");
-    }).join("\n");
-    downloadFile("transactions_" + toDateInputValue(new Date()) + ".csv", csvText, "text/csv;charset=utf-8;");
-    setAppMessage("CSV exported successfully.", false);
-  }
 
-  function exportSummaryPdf() {
-    if (!window.jspdf || !window.jspdf.jsPDF) {
-      setAppMessage("PDF library failed to load. Please retry with internet enabled.", true);
+    var password = promptForProtectedExportPassword("CSV");
+    if (!password) {
       return;
     }
-    var jsPDF = window.jspdf.jsPDF;
-    var documentPdf = new jsPDF();
+
+    try {
+      var response = await fetchApi("/transactions/export/csv", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          password: password,
+          transactions: buildExportTransactionPayload(transactions)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await getBackendError(response));
+      }
+
+      var fileBlob = await response.blob();
+      downloadBlobFile("transactions_" + toDateInputValue(new Date()) + ".csv.enc", fileBlob);
+      setAppMessage("Password-protected CSV exported (.csv.enc).", false);
+    } catch (error) {
+      setAppMessage("CSV export failed: " + error.message, true);
+    }
+  }
+
+  function importTransactionsFromCsvFile(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) {
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (readerEvent) {
+      try {
+        var csvText = String(readerEvent.target.result || "");
+        var rows = parseCsvRows(csvText);
+        if (rows.length <= 1) {
+          throw new Error("CSV file is empty or missing header row.");
+        }
+
+        var headers = rows[0].map(normalizeImportHeader);
+        var importStats = {
+          imported: 0,
+          skipped: 0,
+          errors: []
+        };
+        var dedupeMap = {};
+
+        updateUser(function (user) {
+          (user.transactions || []).forEach(function (transaction) {
+            dedupeMap[buildTransactionSignature(
+              transaction.date,
+              transaction.type,
+              transaction.amount,
+              transaction.accountId,
+              transaction.notes
+            )] = true;
+          });
+
+          rows.slice(1).forEach(function (row, rowIndex) {
+            var rowNumber = rowIndex + 2;
+            if (isImportRowEmpty(row)) {
+              importStats.skipped += 1;
+              return;
+            }
+            try {
+              var normalized = mapCsvRowToTransaction(row, headers, user);
+              var signature = buildTransactionSignature(
+                normalized.date,
+                normalized.type,
+                normalized.amount,
+                normalized.accountId,
+                normalized.notes
+              );
+              if (dedupeMap[signature]) {
+                importStats.skipped += 1;
+                return;
+              }
+              dedupeMap[signature] = true;
+              user.transactions.push({
+                id: window.FinanceStorage.createId("txn"),
+                type: normalized.type,
+                amount: normalized.amount,
+                date: normalized.date,
+                categoryId: normalized.categoryId,
+                notes: normalized.notes,
+                tags: normalized.tags,
+                accountId: normalized.accountId,
+                createdAt: new Date().toISOString()
+              });
+              importStats.imported += 1;
+            } catch (rowError) {
+              importStats.skipped += 1;
+              if (importStats.errors.length < 3) {
+                importStats.errors.push("Row " + rowNumber + ": " + rowError.message);
+              }
+            }
+          });
+
+          return user;
+        }, false);
+
+        renderAll();
+
+        var message = importStats.imported + " transaction(s) imported.";
+        if (importStats.skipped > 0) {
+          message += " " + importStats.skipped + " row(s) skipped.";
+        }
+        if (importStats.errors.length > 0) {
+          message += " " + importStats.errors.join(" ");
+        }
+        setAppMessage(message, importStats.imported === 0);
+      } catch (error) {
+        setAppMessage("CSV import failed: " + error.message, true);
+      } finally {
+        dom.importTransactionsInput.value = "";
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function exportTransactionsPdf() {
+    var transactions = getTransactionsSorted(state.user.transactions);
+    if (transactions.length === 0) {
+      setAppMessage("No transactions available to export.", true);
+      return;
+    }
+
+    var password = promptForProtectedExportPassword("PDF");
+    if (!password) {
+      return;
+    }
+
+    try {
+      var response = await fetchApi("/transactions/export/pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: "NexSpend Transactions Export",
+          currency: state.user && state.user.settings ? state.user.settings.currency : "INR",
+          password: password,
+          transactions: buildExportTransactionPayload(transactions)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await getBackendError(response));
+      }
+
+      var pdfBlob = await response.blob();
+      downloadBlobFile("transactions_" + toDateInputValue(new Date()) + ".pdf", pdfBlob);
+      setAppMessage("Password-protected PDF exported.", false);
+    } catch (error) {
+      setAppMessage("PDF export failed: " + error.message, true);
+    }
+  }
+
+  function buildExportTransactionPayload(transactions) {
+    return transactions.map(function (transaction) {
+      return {
+        id: transaction.id,
+        date: transaction.date,
+        type: transaction.type,
+        amount: toAmount(transaction.amount),
+        category: getCategoryName(transaction.categoryId),
+        account: getAccountName(transaction.accountId),
+        tags: (transaction.tags || []).join(", "),
+        notes: transaction.notes || ""
+      };
+    });
+  }
+
+  function promptForProtectedExportPassword(fileTypeLabel) {
+    var passwordInput = window.prompt("Set a password for " + fileTypeLabel + " export (minimum 4 characters):", "");
+    if (passwordInput == null) {
+      setAppMessage("Export cancelled.", true);
+      return "";
+    }
+    var password = String(passwordInput || "").trim();
+    if (!password) {
+      setAppMessage("Password is required for protected export.", true);
+      return "";
+    }
+    if (password.length < 4) {
+      setAppMessage("Password must be at least 4 characters.", true);
+      return "";
+    }
+    return password;
+  }
+
+  async function importTransactionsFromPdfFile(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      var payload = await requestPdfImportWithPasswordPrompt(file);
+      var parsed = Array.isArray(payload.transactions) ? payload.transactions : [];
+      if (parsed.length === 0) {
+        setAppMessage("No transactions detected. For PhonePe, export full transaction history (with date/amount columns) or use CSV import.", true);
+        return;
+      }
+
+      var importStats = {
+        imported: 0,
+        skipped: 0,
+        errors: []
+      };
+      var dedupeMap = {};
+
+      updateUser(function (user) {
+        (user.transactions || []).forEach(function (transaction) {
+          dedupeMap[buildTransactionSignature(
+            transaction.date,
+            transaction.type,
+            transaction.amount,
+            transaction.accountId,
+            transaction.notes
+          )] = true;
+        });
+
+        parsed.forEach(function (item, index) {
+          try {
+            var normalized = mapPdfItemToTransaction(item, user);
+            var signature = buildTransactionSignature(
+              normalized.date,
+              normalized.type,
+              normalized.amount,
+              normalized.accountId,
+              normalized.notes
+            );
+            if (dedupeMap[signature]) {
+              importStats.skipped += 1;
+              return;
+            }
+            dedupeMap[signature] = true;
+
+            user.transactions.push({
+              id: window.FinanceStorage.createId("txn"),
+              type: normalized.type,
+              amount: normalized.amount,
+              date: normalized.date,
+              categoryId: normalized.categoryId,
+              notes: normalized.notes,
+              tags: normalized.tags,
+              accountId: normalized.accountId,
+              createdAt: new Date().toISOString()
+            });
+            importStats.imported += 1;
+          } catch (itemError) {
+            importStats.skipped += 1;
+            if (importStats.errors.length < 3) {
+              importStats.errors.push("Line " + (index + 1) + ": " + itemError.message);
+            }
+          }
+        });
+        return user;
+      }, false);
+
+      renderAll();
+
+      var message = importStats.imported + " transaction(s) imported from PDF.";
+      if (importStats.skipped > 0) {
+        message += " " + importStats.skipped + " row(s) skipped.";
+      }
+      if (importStats.errors.length > 0) {
+        message += " " + importStats.errors.join(" ");
+      }
+      setAppMessage(message, importStats.imported === 0);
+    } catch (error) {
+      var rawMessage = String(error && error.message ? error.message : "");
+      if (rawMessage.toLowerCase().indexOf("failed to fetch") !== -1 || rawMessage.toLowerCase().indexOf("reach backend api") !== -1) {
+        setAppMessage("PDF import failed: Cannot reach backend API. Ensure backend is running (port 4000/4100) or set NEXSPEND_API_BASE.", true);
+      } else {
+        setAppMessage("PDF import failed: " + rawMessage, true);
+      }
+    } finally {
+      dom.importPdfInput.value = "";
+    }
+  }
+
+  async function requestPdfImportWithPasswordPrompt(file) {
+    var responsePayload = null;
+    try {
+      responsePayload = await requestPdfImport(file, "");
+      return responsePayload;
+    } catch (firstError) {
+      var code = firstError && firstError.code ? firstError.code : "";
+      if (code !== "PDF_PASSWORD_REQUIRED" && code !== "PDF_PASSWORD_INVALID") {
+        throw firstError;
+      }
+      var latestError = firstError;
+      for (var attempt = 1; attempt <= 2; attempt += 1) {
+        var promptMessage = latestError.code === "PDF_PASSWORD_INVALID"
+          ? "Incorrect PDF password. Please enter the correct password:"
+          : "This PDF is password-protected. Enter PDF password:";
+        var password = window.prompt(promptMessage, "");
+        if (password == null) {
+          throw new Error("Import cancelled. PDF password was not provided.");
+        }
+        var cleanPassword = String(password || "").trim();
+        if (!cleanPassword) {
+          latestError = new Error("Import cancelled. PDF password was empty.");
+          latestError.code = "PDF_PASSWORD_REQUIRED";
+          continue;
+        }
+        try {
+          responsePayload = await requestPdfImport(file, cleanPassword);
+          return responsePayload;
+        } catch (retryError) {
+          latestError = retryError;
+          if (retryError.code !== "PDF_PASSWORD_INVALID" && retryError.code !== "PDF_PASSWORD_REQUIRED") {
+            throw retryError;
+          }
+        }
+      }
+      throw latestError;
+    }
+  }
+
+  async function requestPdfImport(file, password) {
+    var formData = new FormData();
+    formData.append("statement", file);
+    if (password) {
+      formData.append("password", password);
+    }
+
+    var response = await fetchApi("/transactions/import/pdf", {
+      method: "POST",
+      body: formData
+    });
+
+    if (!response.ok) {
+      var errorInfo = await getBackendErrorInfo(response);
+      var backendError = new Error(errorInfo.message);
+      backendError.code = errorInfo.code;
+      throw backendError;
+    }
+
+    return response.json();
+  }
+
+  function mapPdfItemToTransaction(item, user) {
+    var date = normalizeImportDate(item.date);
+    if (!date) {
+      throw new Error("date is missing or invalid.");
+    }
+
+    var amountValue = parseImportAmount(item.amount);
+    if (!amountValue) {
+      throw new Error("amount is missing or invalid.");
+    }
+
+    var type = normalizeImportType(item.type);
+    if (!type) {
+      type = amountValue < 0 ? "expense" : "income";
+    }
+    var amount = Math.abs(amountValue);
+    var notes = String(item.notes || item.description || "").trim();
+    var categoryName = String(item.category || "").trim();
+    var accountName = String(item.account || item.accountName || "").trim();
+    var tags = Array.isArray(item.tags)
+      ? parseImportTags(item.tags.join(","))
+      : parseImportTags(item.tags);
+
+    return {
+      type: type,
+      amount: amount,
+      date: date,
+      categoryId: resolveImportCategoryId(user, type, categoryName, notes),
+      accountId: resolveImportAccountId(user, accountName),
+      tags: tags,
+      notes: notes
+    };
+  }
+
+  async function getBackendError(response) {
+    var errorInfo = await getBackendErrorInfo(response);
+    return errorInfo.message;
+  }
+
+  function getApiBaseCandidates() {
+    var candidates = [RUNTIME_API_BASE, BACKEND_API_BASE];
+    if (window.location && window.location.origin) {
+      candidates.push(String(window.location.origin).replace(/\/+$/, "") + "/api");
+    }
+    if (window.location && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
+      candidates.push("http://localhost:4000/api");
+      candidates.push("http://localhost:4100/api");
+    }
+    var unique = [];
+    candidates.forEach(function (item) {
+      var base = String(item || "").replace(/\/+$/, "");
+      if (base && unique.indexOf(base) === -1) {
+        unique.push(base);
+      }
+    });
+    return unique;
+  }
+
+  async function fetchApi(path, options) {
+    var endpointPath = String(path || "");
+    var candidates = getApiBaseCandidates();
+    var lastError = null;
+
+    for (var index = 0; index < candidates.length; index += 1) {
+      var base = candidates[index];
+      try {
+        var response = await fetch(base + endpointPath, options);
+        RUNTIME_API_BASE = base;
+        return response;
+      } catch (error) {
+        var message = String(error && error.message ? error.message : "");
+        var isNetworkError = error && (error.name === "TypeError" || message.toLowerCase().indexOf("failed to fetch") !== -1);
+        if (!isNetworkError) {
+          throw error;
+        }
+        lastError = error;
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
+    throw new Error("Failed to reach backend API.");
+  }
+
+  async function getBackendErrorInfo(response) {
+    try {
+      var payload = await response.json();
+      return {
+        message: payload && payload.message ? payload.message : "Backend request failed.",
+        code: payload && payload.code ? payload.code : ""
+      };
+    } catch (error) {
+      return {
+        message: "Backend request failed.",
+        code: ""
+      };
+    }
+  }
+
+  async function exportSummaryPdf() {
+    if (!state.user) {
+      return;
+    }
+
+    var password = promptForProtectedExportPassword("Summary PDF");
+    if (!password) {
+      return;
+    }
+
     var month = getCurrentMonthKey();
     var income = getMonthIncome(month);
     var expense = getMonthExpense(month);
     var balance = income - expense;
-    var insights = generateInsights();
+    var insights = generateInsights().slice(0, 8).map(function (insight) {
+      return insight && insight.message ? insight.message : String(insight || "");
+    });
 
-    documentPdf.setFontSize(16);
-    documentPdf.text("Finance Tracker Summary", 14, 16);
-    documentPdf.setFontSize(10);
-    documentPdf.text("Month: " + month, 14, 24);
-    documentPdf.text("Income: " + formatMoney(income), 14, 31);
-    documentPdf.text("Expense: " + formatMoney(expense), 14, 38);
-    documentPdf.text("Net: " + formatMoney(balance), 14, 45);
-
-    documentPdf.setFontSize(12);
-    documentPdf.text("Top Insights", 14, 56);
-    documentPdf.setFontSize(10);
-    if (insights.length === 0) {
-      documentPdf.text("- No insights yet.", 14, 63);
-    } else {
-      insights.slice(0, 6).forEach(function (insight, index) {
-        documentPdf.text((index + 1) + ". " + insight.message, 14, 63 + (index * 7));
+    try {
+      var response = await fetchApi("/reports/export/summary/pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          month: month,
+          income: income,
+          expense: expense,
+          balance: balance,
+          insights: insights,
+          currency: state.user && state.user.settings ? state.user.settings.currency : "INR",
+          password: password
+        })
       });
+
+      if (!response.ok) {
+        throw new Error(await getBackendError(response));
+      }
+
+      var pdfBlob = await response.blob();
+      downloadBlobFile("finance_summary_" + month + ".pdf", pdfBlob);
+      setAppMessage("Password-protected summary PDF exported.", false);
+    } catch (error) {
+      setAppMessage("Summary PDF export failed: " + error.message, true);
     }
-    documentPdf.save("finance_summary_" + month + ".pdf");
-    setAppMessage("PDF exported successfully.", false);
   }
 
   function backupUserData() {
@@ -1908,9 +2370,13 @@
   }
 
   function inferCategoryId(type, notes) {
+    return inferCategoryIdForUser(state.user, type, notes);
+  }
+
+  function inferCategoryIdForUser(user, type, notes) {
     var text = String(notes || "").toLowerCase();
     var keywordMap = categoryKeywords[type] || {};
-    var categories = state.user.categories || [];
+    var categories = user && user.categories ? user.categories : [];
     var matchedCategoryName = "";
     Object.keys(keywordMap).some(function (categoryName) {
       var keywords = keywordMap[categoryName] || [];
@@ -2045,6 +2511,421 @@
     return toDateInputValue(date);
   }
 
+  function parseCsvRows(text) {
+    var csvText = String(text || "").replace(/^\uFEFF/, "");
+    var rows = [];
+    var row = [];
+    var value = "";
+    var inQuotes = false;
+
+    for (var index = 0; index < csvText.length; index += 1) {
+      var char = csvText.charAt(index);
+
+      if (char === '"') {
+        if (inQuotes && csvText.charAt(index + 1) === '"') {
+          value += '"';
+          index += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+
+      if (char === "," && !inQuotes) {
+        row.push(value);
+        value = "";
+        continue;
+      }
+
+      if ((char === "\n" || char === "\r") && !inQuotes) {
+        if (char === "\r" && csvText.charAt(index + 1) === "\n") {
+          index += 1;
+        }
+        row.push(value);
+        rows.push(row);
+        row = [];
+        value = "";
+        continue;
+      }
+
+      value += char;
+    }
+
+    if (value.length > 0 || row.length > 0) {
+      row.push(value);
+      rows.push(row);
+    }
+
+    while (rows.length > 0 && isImportRowEmpty(rows[rows.length - 1])) {
+      rows.pop();
+    }
+
+    return rows;
+  }
+
+  function normalizeImportHeader(header) {
+    return String(header || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\(.*?\)/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
+
+  function isImportRowEmpty(row) {
+    return (row || []).every(function (cell) {
+      return String(cell || "").trim() === "";
+    });
+  }
+
+  function getCsvImportValue(row, headers, aliases) {
+    var matchedHeader = aliases.find(function (alias) {
+      return headers.indexOf(alias) !== -1;
+    });
+    if (!matchedHeader) {
+      return "";
+    }
+    var cellIndex = headers.indexOf(matchedHeader);
+    return String(row[cellIndex] == null ? "" : row[cellIndex]).trim();
+  }
+
+  function mapCsvRowToTransaction(row, headers, user) {
+    var dateText = getCsvImportValue(row, headers, [
+      "date",
+      "transaction_date",
+      "txn_date",
+      "posted_date",
+      "value_date"
+    ]);
+    if (!dateText) {
+      throw new Error("date is missing.");
+    }
+
+    var date = normalizeImportDate(dateText);
+    if (!date) {
+      throw new Error("date format is not supported.");
+    }
+
+    var explicitType = normalizeImportType(getCsvImportValue(row, headers, [
+      "type",
+      "transaction_type",
+      "txn_type",
+      "dr_cr",
+      "credit_debit",
+      "entry_type"
+    ]));
+
+    var amountText = getCsvImportValue(row, headers, [
+      "amount",
+      "transaction_amount",
+      "amt",
+      "value"
+    ]);
+    var debitText = getCsvImportValue(row, headers, [
+      "debit",
+      "debit_amount",
+      "withdrawal",
+      "withdrawn",
+      "spent"
+    ]);
+    var creditText = getCsvImportValue(row, headers, [
+      "credit",
+      "credit_amount",
+      "deposit",
+      "received",
+      "income"
+    ]);
+
+    var rawAmount = parseImportAmount(amountText);
+    var debitAmount = parseImportAmount(debitText);
+    var creditAmount = parseImportAmount(creditText);
+    var amount = 0;
+    var type = explicitType;
+
+    if (debitAmount > 0 || creditAmount > 0) {
+      if (debitAmount > 0 && creditAmount > 0) {
+        throw new Error("both debit and credit are present.");
+      }
+      if (debitAmount > 0) {
+        amount = debitAmount;
+        type = "expense";
+      } else {
+        amount = creditAmount;
+        type = "income";
+      }
+    } else {
+      if (!amountText || rawAmount === 0) {
+        throw new Error("amount is missing or invalid.");
+      }
+      amount = Math.abs(rawAmount);
+      if (!type) {
+        type = rawAmount < 0 ? "expense" : "income";
+      }
+    }
+
+    if (explicitType) {
+      type = explicitType;
+    }
+    if (!type) {
+      throw new Error("transaction type is missing.");
+    }
+    if (amount <= 0) {
+      throw new Error("amount must be greater than 0.");
+    }
+
+    var notes = getCsvImportValue(row, headers, [
+      "notes",
+      "note",
+      "description",
+      "narration",
+      "details",
+      "remark",
+      "remarks",
+      "merchant"
+    ]);
+    var categoryName = getCsvImportValue(row, headers, [
+      "category",
+      "category_name"
+    ]);
+    var accountName = getCsvImportValue(row, headers, [
+      "account",
+      "account_name",
+      "bank_account",
+      "wallet"
+    ]);
+    var tags = parseImportTags(getCsvImportValue(row, headers, [
+      "tags",
+      "tag",
+      "labels"
+    ]));
+
+    return {
+      type: type,
+      amount: amount,
+      date: date,
+      categoryId: resolveImportCategoryId(user, type, categoryName, notes),
+      accountId: resolveImportAccountId(user, accountName),
+      tags: tags,
+      notes: notes
+    };
+  }
+
+  function parseImportAmount(text) {
+    var raw = String(text || "").trim();
+    if (!raw) {
+      return 0;
+    }
+
+    var negativeFromBrackets = /^\(.*\)$/.test(raw);
+    var normalized = raw.replace(/[,\s]/g, "").replace(/[^\d.\-]/g, "");
+    if (!normalized || normalized === "." || normalized === "-" || normalized === "-.") {
+      return 0;
+    }
+
+    var parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    if (negativeFromBrackets) {
+      return -Math.abs(parsed);
+    }
+    return parsed;
+  }
+
+  function normalizeImportType(typeText) {
+    var normalized = String(typeText || "").trim().toLowerCase();
+    if (!normalized) {
+      return "";
+    }
+    if (
+      normalized === "income" ||
+      normalized === "credit" ||
+      normalized === "cr" ||
+      normalized === "deposit" ||
+      normalized === "inflow" ||
+      normalized === "received"
+    ) {
+      return "income";
+    }
+    if (
+      normalized === "expense" ||
+      normalized === "debit" ||
+      normalized === "dr" ||
+      normalized === "withdrawal" ||
+      normalized === "outflow" ||
+      normalized === "spent"
+    ) {
+      return "expense";
+    }
+    return "";
+  }
+
+  function resolveImportAccountId(user, accountName) {
+    var accounts = user.accounts || [];
+    var cleanName = String(accountName || "").trim();
+
+    if (!cleanName) {
+      if (accounts[0]) {
+        return accounts[0].id;
+      }
+      var defaultAccount = {
+        id: window.FinanceStorage.createId("acct"),
+        name: "Imported Account",
+        type: "bank",
+        initialBalance: 0
+      };
+      user.accounts.push(defaultAccount);
+      return defaultAccount.id;
+    }
+
+    var existing = accounts.find(function (account) {
+      return account.name.toLowerCase() === cleanName.toLowerCase();
+    });
+    if (existing) {
+      return existing.id;
+    }
+
+    var type = "bank";
+    var normalizedName = cleanName.toLowerCase();
+    if (normalizedName.indexOf("upi") !== -1) {
+      type = "upi";
+    } else if (normalizedName.indexOf("wallet") !== -1 || normalizedName.indexOf("cash") !== -1) {
+      type = "wallet";
+    }
+
+    var nextAccount = {
+      id: window.FinanceStorage.createId("acct"),
+      name: cleanName,
+      type: type,
+      initialBalance: 0
+    };
+    user.accounts.push(nextAccount);
+    return nextAccount.id;
+  }
+
+  function resolveImportCategoryId(user, type, categoryName, notes) {
+    var categories = user.categories || [];
+    var cleanName = String(categoryName || "").trim();
+
+    if (cleanName) {
+      var existing = categories.find(function (category) {
+        return category.type === type && category.name.toLowerCase() === cleanName.toLowerCase();
+      });
+      if (existing) {
+        return existing.id;
+      }
+      var created = {
+        id: window.FinanceStorage.createId("cat"),
+        name: cleanName,
+        type: type,
+        system: false
+      };
+      user.categories.push(created);
+      return created.id;
+    }
+
+    var inferred = inferCategoryIdForUser(user, type, notes);
+    if (inferred) {
+      return inferred;
+    }
+
+    var fallback = {
+      id: window.FinanceStorage.createId("cat"),
+      name: type === "income" ? "Imported Income" : "Imported Expense",
+      type: type,
+      system: false
+    };
+    user.categories.push(fallback);
+    return fallback.id;
+  }
+
+  function parseImportTags(text) {
+    var tagText = String(text || "").trim();
+    if (!tagText) {
+      return [];
+    }
+    return parseTags(tagText.replace(/[|;]/g, ","));
+  }
+
+  function normalizeImportDate(value) {
+    var text = String(value || "").trim();
+    if (!text) {
+      return "";
+    }
+
+    var cleaned = text.replace(/[.]/g, "/");
+    if (cleaned.indexOf("T") !== -1) {
+      cleaned = cleaned.split("T")[0];
+    }
+    if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(cleaned)) {
+      var isoParts = cleaned.split(/[-/]/);
+      var isoYear = Number(isoParts[0]);
+      var isoMonth = Number(isoParts[1]);
+      var isoDay = Number(isoParts[2]);
+      if (isValidDateParts(isoYear, isoMonth, isoDay)) {
+        return isoYear + "-" + padNumber(isoMonth) + "-" + padNumber(isoDay);
+      }
+      return "";
+    }
+
+    if (/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(cleaned)) {
+      var localParts = cleaned.split(/[-/]/);
+      var first = Number(localParts[0]);
+      var second = Number(localParts[1]);
+      var year = Number(localParts[2]);
+      if (year < 100) {
+        year += 2000;
+      }
+
+      var day = first;
+      var month = second;
+      if (first <= 12 && second > 12) {
+        month = first;
+        day = second;
+      }
+
+      if (isValidDateParts(year, month, day)) {
+        return year + "-" + padNumber(month) + "-" + padNumber(day);
+      }
+      return "";
+    }
+
+    var fallbackDate = new Date(cleaned);
+    if (Number.isNaN(fallbackDate.getTime())) {
+      return "";
+    }
+    return toDateInputValue(fallbackDate);
+  }
+
+  function isValidDateParts(year, month, day) {
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+      return false;
+    }
+    if (month < 1 || month > 12 || day < 1 || day > 31) {
+      return false;
+    }
+    var date = new Date(year, month - 1, day);
+    return (
+      date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day
+    );
+  }
+
+  function padNumber(number) {
+    return String(number).padStart(2, "0");
+  }
+
+  function buildTransactionSignature(date, type, amount, accountId, notes) {
+    return [
+      date || "",
+      type || "",
+      toAmount(amount).toFixed(2),
+      accountId || "",
+      String(notes || "").trim().toLowerCase()
+    ].join("|");
+  }
+
   function parseTags(text) {
     return String(text || "")
       .split(",")
@@ -2137,16 +3018,12 @@
       .replace(/'/g, "&#39;");
   }
 
-  function csvCell(value) {
-    var text = String(value == null ? "" : value);
-    if (text.indexOf(",") >= 0 || text.indexOf('"') >= 0 || text.indexOf("\n") >= 0) {
-      return '"' + text.replace(/"/g, '""') + '"';
-    }
-    return text;
-  }
-
   function downloadFile(name, content, mimeType) {
     var blob = new Blob([content], { type: mimeType });
+    downloadBlobFile(name, blob);
+  }
+
+  function downloadBlobFile(name, blob) {
     var url = URL.createObjectURL(blob);
     var anchor = document.createElement("a");
     anchor.href = url;
