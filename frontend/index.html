@@ -551,6 +551,14 @@
                 <label>Notes</label>
                 <textarea id="transactionNotes" rows="2" placeholder="Optional notes…"></textarea>
               </div>
+              <div class="field full detect-transaction-field">
+                <label for="transactionDetectInput">Auto Detect</label>
+                <textarea id="transactionDetectInput" rows="3" placeholder="Paste a bank SMS, UPI message, or statement line"></textarea>
+                <div class="detect-transaction-actions">
+                  <button id="detectTransactionBtn" class="btn btn-ghost btn-sm" type="button">Detect Details</button>
+                  <p id="transactionDetectMessage" class="status-text detect-transaction-message"></p>
+                </div>
+              </div>
               <div class="full inline-checks">
                 <label class="inline">
                   <input id="isRecurringTransaction" type="checkbox">

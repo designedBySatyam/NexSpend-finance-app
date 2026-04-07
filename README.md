@@ -99,6 +99,7 @@ Persistent data note:
   - Bill reminders with due-soon/overdue detection
   - Recurring transaction rules (weekly/monthly auto-entry)
   - Auto-categorization by note keywords
+  - Auto transaction detection from pasted bank/SMS/UPI text
   - Insight engine with spending and savings suggestions
 - Search and filters:
   - Keyword, category, type, min/max amount

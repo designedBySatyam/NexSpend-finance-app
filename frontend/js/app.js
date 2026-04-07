@@ -52,6 +52,32 @@
       Investment: ["dividend", "interest", "mutual fund", "stock", "investment"]
     }
   };
+  var MONTH_INDEX_BY_NAME = {
+    jan: 1,
+    january: 1,
+    feb: 2,
+    february: 2,
+    mar: 3,
+    march: 3,
+    apr: 4,
+    april: 4,
+    may: 5,
+    jun: 6,
+    june: 6,
+    jul: 7,
+    july: 7,
+    aug: 8,
+    august: 8,
+    sep: 9,
+    sept: 9,
+    september: 9,
+    oct: 10,
+    october: 10,
+    nov: 11,
+    november: 11,
+    dec: 12,
+    december: 12
+  };
 
   document.addEventListener("DOMContentLoaded", init);
 
@@ -117,6 +143,9 @@
     dom.transactionTags = byId("transactionTags");
     dom.transactionAccount = byId("transactionAccount");
     dom.transactionNotes = byId("transactionNotes");
+    dom.transactionDetectInput = byId("transactionDetectInput");
+    dom.detectTransactionBtn = byId("detectTransactionBtn");
+    dom.transactionDetectMessage = byId("transactionDetectMessage");
     dom.isRecurringTransaction = byId("isRecurringTransaction");
     dom.recurringFrequency = byId("recurringFrequency");
     dom.cancelEditBtn = byId("cancelEditBtn");
@@ -275,6 +304,14 @@
     });
     dom.transactionForm.addEventListener("submit", handleTransactionSubmit);
     dom.cancelEditBtn.addEventListener("click", resetTransactionForm);
+    if (dom.detectTransactionBtn) {
+      dom.detectTransactionBtn.addEventListener("click", handleDetectTransactionClick);
+    }
+    if (dom.transactionDetectInput) {
+      dom.transactionDetectInput.addEventListener("input", function () {
+        setTransactionDetectMessage("", "");
+      });
+    }
 
     dom.filtersForm.addEventListener("submit", handleFiltersSubmit);
     dom.clearFiltersBtn.addEventListener("click", clearFilters);
@@ -797,6 +834,44 @@
     renderAll();
   }
 
+  function handleDetectTransactionClick() {
+    if (!state.user || !dom.transactionDetectInput) {
+      return;
+    }
+
+    var sourceText = String(dom.transactionDetectInput.value || "").trim();
+    if (!sourceText) {
+      setTransactionDetectMessage("Paste a bank/SMS line to auto detect fields.", "error");
+      return;
+    }
+
+    try {
+      var detected = detectTransactionFromRawText(sourceText);
+      dom.transactionType.value = detected.type;
+      populateTransactionCategorySelect(detected.type, detected.categoryId || AUTO_CATEGORY_VALUE);
+      dom.transactionAmount.value = detected.amount.toFixed(2);
+      dom.transactionDate.value = detected.date;
+      dom.transactionNotes.value = detected.notes;
+      dom.transactionTags.value = (detected.tags || []).join(", ");
+      populateAccountsSelect(detected.accountId || getDefaultAccountId());
+      dom.transactionAccount.value = detected.accountId || getDefaultAccountId();
+
+      var duplicate = findPotentialDuplicateTransaction(detected);
+      var message = "Detected " + capitalize(detected.type) + " " + formatMoney(detected.amount) + " on " + formatDate(detected.date) + ". Review and save.";
+      if (detected.dateWasGuessed) {
+        message += " Date defaulted to today.";
+      }
+      if (duplicate) {
+        message += " Similar transaction already exists.";
+        setTransactionDetectMessage(message, "warning");
+        return;
+      }
+      setTransactionDetectMessage(message, "success");
+    } catch (error) {
+      setTransactionDetectMessage(error.message || "Could not detect transaction details.", "error");
+    }
+  }
+
   function resetTransactionForm() {
     dom.transactionForm.reset();
     dom.transactionId.value = "";
@@ -804,6 +879,10 @@
     dom.transactionType.value = "expense";
     populateTransactionCategorySelect("expense", AUTO_CATEGORY_VALUE);
     dom.transactionAccount.value = getDefaultAccountId();
+    if (dom.transactionDetectInput) {
+      dom.transactionDetectInput.value = "";
+    }
+    setTransactionDetectMessage("", "");
     dom.cancelEditBtn.classList.add("hidden");
     dom.editIndicator.classList.add("hidden");
   }
@@ -1838,6 +1917,10 @@
     dom.transactionNotes.value = transaction.notes || "";
     dom.transactionAccount.value = transaction.accountId || getDefaultAccountId();
     dom.isRecurringTransaction.checked = false;
+    if (dom.transactionDetectInput) {
+      dom.transactionDetectInput.value = "";
+    }
+    setTransactionDetectMessage("", "");
     dom.cancelEditBtn.classList.remove("hidden");
     dom.editIndicator.classList.remove("hidden");
     setActiveSection("transactions");
@@ -3560,6 +3643,17 @@
     dom.exportMessage.style.color = isError ? "var(--danger)" : "var(--muted)";
   }
 
+  function setTransactionDetectMessage(message, tone) {
+    if (!dom.transactionDetectMessage) {
+      return;
+    }
+    dom.transactionDetectMessage.textContent = message || "";
+    dom.transactionDetectMessage.classList.remove("is-success", "is-warning", "is-error");
+    if (tone === "success" || tone === "warning" || tone === "error") {
+      dom.transactionDetectMessage.classList.add("is-" + tone);
+    }
+  }
+
   function toggleTheme() {
     var currentTheme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
     var nextTheme = currentTheme === "dark" ? "light" : "dark";
@@ -3676,6 +3770,286 @@
 
   function getDefaultAccountId() {
     return state.user && state.user.accounts && state.user.accounts[0] ? state.user.accounts[0].id : "";
+  }
+
+  function detectTransactionFromRawText(text) {
+    var source = String(text || "").replace(/\s+/g, " ").trim();
+    if (!source) {
+      throw new Error("Paste transaction text first.");
+    }
+
+    var bestAmountCandidate = getBestDetectionAmountCandidate(source);
+    if (!bestAmountCandidate || !(bestAmountCandidate.amount > 0)) {
+      throw new Error("Could not detect a valid amount in the pasted text.");
+    }
+
+    var dateToken = extractDateCandidateFromText(source);
+    var detectedDate = normalizeImportDate(dateToken);
+    var dateWasGuessed = false;
+    if (!detectedDate) {
+      detectedDate = toDateInputValue(new Date());
+      dateWasGuessed = true;
+    }
+
+    var detectedType = inferDetectedTypeFromText(source, bestAmountCandidate.raw);
+    var detectedNotes = cleanDetectedNotes(source, dateToken, bestAmountCandidate.raw);
+    if (!detectedNotes) {
+      detectedNotes = source.slice(0, 120);
+    }
+
+    var detectedAccountId = inferDetectedAccountIdFromText(source);
+    var detectedCategoryId = inferCategoryIdForUser(state.user, detectedType, detectedNotes || source);
+    var detectedTags = inferDetectedTags(source, detectedType, detectedNotes);
+
+    return {
+      amount: Math.abs(bestAmountCandidate.amount),
+      type: detectedType,
+      date: detectedDate,
+      dateWasGuessed: dateWasGuessed,
+      notes: detectedNotes,
+      accountId: detectedAccountId,
+      categoryId: detectedCategoryId,
+      tags: detectedTags
+    };
+  }
+
+  function findPotentialDuplicateTransaction(transactionLike) {
+    if (!state.user || !Array.isArray(state.user.transactions)) {
+      return null;
+    }
+
+    var signature = buildTransactionSignature(
+      transactionLike.date,
+      transactionLike.type,
+      transactionLike.amount,
+      transactionLike.accountId,
+      transactionLike.notes
+    );
+    var accountId = transactionLike.accountId || getDefaultAccountId();
+    var targetAmount = toAmount(transactionLike.amount);
+
+    return state.user.transactions.find(function (transaction) {
+      var txAccountId = transaction.accountId || getDefaultAccountId();
+      if (buildTransactionSignature(transaction.date, transaction.type, transaction.amount, txAccountId, transaction.notes) === signature) {
+        return true;
+      }
+      return (
+        transaction.date === transactionLike.date &&
+        transaction.type === transactionLike.type &&
+        txAccountId === accountId &&
+        Math.abs(toAmount(transaction.amount) - targetAmount) < 0.01
+      );
+    }) || null;
+  }
+
+  function getBestDetectionAmountCandidate(text) {
+    var candidates = extractDetectionAmountCandidates(text);
+    if (candidates.length === 0) {
+      return null;
+    }
+    candidates.sort(function (a, b) {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return b.index - a.index;
+    });
+    return candidates[0];
+  }
+
+  function extractDetectionAmountCandidates(text) {
+    var source = String(text || "");
+    var candidates = [];
+
+    function pushCandidate(raw, index, strictMode) {
+      var parsedAmount = parseImportAmount(raw);
+      if (parsedAmount === 0) {
+        return;
+      }
+
+      var contextStart = Math.max(0, index - 30);
+      var contextEnd = Math.min(source.length, index + String(raw).length + 30);
+      var context = source.slice(contextStart, contextEnd).toLowerCase();
+      var score = strictMode ? 4 : 1;
+
+      if (/(?:inr|rs\.?|\u20B9|\$|usd|eur|gbp)/i.test(raw)) {
+        score += 6;
+      }
+      if (/\b(debit|debited|credit|credited|paid|received|txn|transaction|upi|spent|purchase|withdrawn|deposit)\b/.test(context)) {
+        score += 4;
+      }
+      if (/\b(balance|avl|available|remaining|limit|outstanding)\b/.test(context)) {
+        score -= 5;
+      }
+
+      candidates.push({
+        raw: String(raw),
+        amount: parsedAmount,
+        index: index,
+        score: score
+      });
+    }
+
+    var strictPattern = /(?:\(|-)?(?:INR|Rs\.?|\u20B9|\$|USD|EUR|GBP)\s*\d[\d,]*(?:\.\d{1,2})?\)?|(?:\(|-)?\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?\)?|(?:\(|-)?\d+\.\d{1,2}\)?/gi;
+    var strictMatch;
+    while ((strictMatch = strictPattern.exec(source)) !== null) {
+      pushCandidate(strictMatch[0], strictMatch.index, true);
+    }
+
+    if (candidates.length === 0) {
+      var softPattern = /\b\d{2,7}\b/g;
+      var softMatch;
+      while ((softMatch = softPattern.exec(source)) !== null) {
+        var contextStart = Math.max(0, softMatch.index - 20);
+        var contextEnd = Math.min(source.length, softMatch.index + String(softMatch[0]).length + 20);
+        var context = source.slice(contextStart, contextEnd).toLowerCase();
+        if (!/\b(amount|debited|credited|paid|received|spent|txn|transaction|upi|transfer)\b/.test(context)) {
+          continue;
+        }
+        pushCandidate(softMatch[0], softMatch.index, false);
+      }
+    }
+
+    return candidates.filter(function (candidate) {
+      return candidate.amount > 0;
+    });
+  }
+
+  function inferDetectedTypeFromText(text, amountToken) {
+    var lower = String(text || "").toLowerCase();
+    if (/\b(credited|credit|received|salary|refund|cashback|interest|deposit|reversal|bonus)\b/.test(lower)) {
+      return "income";
+    }
+    if (/\b(debited|debit|paid|spent|purchase|sent|withdraw|recharge|bill|charge|dr)\b/.test(lower)) {
+      return "expense";
+    }
+    if (/^\(|^-/.test(String(amountToken || "").trim())) {
+      return "expense";
+    }
+    return "expense";
+  }
+
+  function inferDetectedAccountIdFromText(text) {
+    var lower = String(text || "").toLowerCase();
+    var accounts = state.user && state.user.accounts ? state.user.accounts : [];
+
+    var exact = accounts.find(function (account) {
+      var accountName = String(account.name || "").trim().toLowerCase();
+      return accountName && lower.indexOf(accountName) !== -1;
+    });
+    if (exact) {
+      return exact.id;
+    }
+
+    if (/\b(upi|phonepe|gpay|google pay|paytm|bhim)\b/.test(lower)) {
+      var upiAccount = accounts.find(function (account) {
+        return account.type === "upi";
+      });
+      if (upiAccount) {
+        return upiAccount.id;
+      }
+    }
+
+    if (/\b(wallet|cash)\b/.test(lower)) {
+      var walletAccount = accounts.find(function (account) {
+        return account.type === "wallet";
+      });
+      if (walletAccount) {
+        return walletAccount.id;
+      }
+    }
+
+    if (/\b(card|bank|account|a\/c|acct)\b/.test(lower)) {
+      var bankAccount = accounts.find(function (account) {
+        return account.type === "bank";
+      });
+      if (bankAccount) {
+        return bankAccount.id;
+      }
+    }
+
+    return getDefaultAccountId();
+  }
+
+  function inferDetectedTags(text, type, notes) {
+    var lower = (String(text || "") + " " + String(notes || "")).toLowerCase();
+    var tags = [];
+
+    function addTag(tag) {
+      if (tags.indexOf(tag) === -1) {
+        tags.push(tag);
+      }
+    }
+
+    if (/\b(upi|phonepe|gpay|google pay|paytm|bhim)\b/.test(lower)) {
+      addTag("upi");
+    }
+    if (/\b(card|credit card|debit card)\b/.test(lower)) {
+      addTag("card");
+    }
+    if (/\b(wallet|cash)\b/.test(lower)) {
+      addTag("wallet");
+    }
+    if (/\b(subscription|autopay|renewal)\b/.test(lower)) {
+      addTag("subscription");
+    }
+    if (/\b(transfer|imps|neft|rtgs)\b/.test(lower)) {
+      addTag("transfer");
+    }
+    if (/\b(refund|reversal)\b/.test(lower)) {
+      addTag("refund");
+    }
+    if (type === "income" && /\b(salary|payroll)\b/.test(lower)) {
+      addTag("salary");
+    }
+
+    return tags.slice(0, 4);
+  }
+
+  function cleanDetectedNotes(text, dateToken, amountToken) {
+    var notes = String(text || "");
+    if (dateToken) {
+      notes = notes.replace(dateToken, " ");
+    }
+    if (amountToken) {
+      notes = notes.replace(amountToken, " ");
+    }
+
+    notes = notes
+      .replace(/\b(?:transaction(?: id)?|txn(?: id)?|utr(?: no)?|ref(?:erence)?(?: no)?|order(?: id)?)\b\s*[:#-]?\s*[\w/-]*/gi, " ")
+      .replace(/\b(?:available balance|avl balance|closing balance|balance)\b\s*[:#-]?\s*[\w.,/-]*/gi, " ")
+      .replace(/\b(?:a\/c|acct|account)\b\s*[:#-]?\s*[\w*-]*/gi, " ")
+      .replace(/\b(?:inr|rs\.?|\u20B9)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (notes.length > 120) {
+      notes = notes.slice(0, 120).trim();
+    }
+
+    return notes;
+  }
+
+  function extractDateCandidateFromText(text) {
+    var source = String(text || "");
+    if (!source) {
+      return "";
+    }
+
+    var datePatterns = [
+      /\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b/,
+      /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/,
+      /\b\d{1,2}(?:st|nd|rd|th)?[\s\-\/]+[A-Za-z]{3,9}[\s,\-\/]+\d{2,4}\b/i,
+      /\b[A-Za-z]{3,9}[\s\-\/]+\d{1,2}(?:st|nd|rd|th)?[,]?[\s\-\/]+\d{2,4}\b/i
+    ];
+
+    for (var index = 0; index < datePatterns.length; index += 1) {
+      var match = source.match(datePatterns[index]);
+      if (match) {
+        return match[0];
+      }
+    }
+
+    return "";
   }
 
   function getMonthIncome(monthKey) {
@@ -4059,13 +4433,19 @@
     return parseTags(tagText.replace(/[|;]/g, ","));
   }
 
+  function getMonthIndexByName(monthName) {
+    return MONTH_INDEX_BY_NAME[String(monthName || "").trim().toLowerCase()] || 0;
+  }
+
   function normalizeImportDate(value) {
     var text = String(value || "").trim();
     if (!text) {
       return "";
     }
 
-    var cleaned = text.replace(/[.]/g, "/");
+    var cleaned = text
+      .replace(/[.]/g, "/")
+      .replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, "$1");
     if (cleaned.indexOf("T") !== -1) {
       cleaned = cleaned.split("T")[0];
     }
@@ -4098,6 +4478,34 @@
 
       if (isValidDateParts(year, month, day)) {
         return year + "-" + padNumber(month) + "-" + padNumber(day);
+      }
+      return "";
+    }
+
+    var dayMonthYearMatch = cleaned.match(/^(\d{1,2})[\s\-\/]+([A-Za-z]{3,9})[\s,\-\/]+(\d{2,4})$/);
+    if (dayMonthYearMatch) {
+      var dmyDay = Number(dayMonthYearMatch[1]);
+      var dmyMonth = getMonthIndexByName(dayMonthYearMatch[2]);
+      var dmyYear = Number(dayMonthYearMatch[3]);
+      if (dmyYear < 100) {
+        dmyYear += 2000;
+      }
+      if (dmyMonth && isValidDateParts(dmyYear, dmyMonth, dmyDay)) {
+        return dmyYear + "-" + padNumber(dmyMonth) + "-" + padNumber(dmyDay);
+      }
+      return "";
+    }
+
+    var monthDayYearMatch = cleaned.match(/^([A-Za-z]{3,9})[\s\-\/]+(\d{1,2})[,]?[\s\-\/]+(\d{2,4})$/);
+    if (monthDayYearMatch) {
+      var mdyMonth = getMonthIndexByName(monthDayYearMatch[1]);
+      var mdyDay = Number(monthDayYearMatch[2]);
+      var mdyYear = Number(monthDayYearMatch[3]);
+      if (mdyYear < 100) {
+        mdyYear += 2000;
+      }
+      if (mdyMonth && isValidDateParts(mdyYear, mdyMonth, mdyDay)) {
+        return mdyYear + "-" + padNumber(mdyMonth) + "-" + padNumber(mdyDay);
       }
       return "";
     }

@@ -1822,6 +1822,43 @@ select option { background: var(--bg-card); color: var(--text); }
   min-height: 84px;
 }
 
+#quickAddPanel .field.detect-transaction-field {
+  border-style: dashed;
+  border-color: rgba(16,185,129,0.36);
+  background: linear-gradient(180deg, rgba(16,185,129,0.09), rgba(0,0,0,0.18));
+}
+
+#quickAddPanel #transactionDetectInput {
+  min-height: 62px;
+  resize: vertical;
+}
+
+#quickAddPanel .detect-transaction-actions {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+#quickAddPanel .detect-transaction-message {
+  margin: 0;
+  min-height: 1rem;
+  flex: 1;
+  font-size: 0.79rem;
+}
+
+#quickAddPanel .detect-transaction-message.is-success {
+  color: var(--success);
+}
+
+#quickAddPanel .detect-transaction-message.is-warning {
+  color: var(--warning);
+}
+
+#quickAddPanel .detect-transaction-message.is-error {
+  color: var(--danger);
+}
+
 #quickAddPanel .inline-checks.full {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 170px;
@@ -2075,6 +2112,11 @@ select option { background: var(--bg-card); color: var(--text); }
 [data-theme="light"] #quickAddPanel .inline-checks.full {
   border-color: rgba(19,148,109,0.3);
   background: rgba(232,250,243,0.78);
+}
+
+[data-theme="light"] #quickAddPanel .field.detect-transaction-field {
+  border-color: rgba(14,165,118,0.38);
+  background: linear-gradient(180deg, rgba(16,185,129,0.1), rgba(255,255,255,0.68));
 }
 
 [data-theme="light"] #quickAddPanel .panel-subtitle { color: #476258; }
@@ -2674,6 +2716,10 @@ tbody tr:last-child td { border-bottom: none; }
   #quickAddPanel .inline-checks.full {
     grid-template-columns: 1fr;
   }
+  #quickAddPanel .detect-transaction-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
   #filtersForm .field:nth-of-type(8) {
     grid-column: 1 / -1;
   }
@@ -2879,4 +2925,3 @@ tbody tr:last-child td { border-bottom: none; }
 /* ─── LIGHT SIDEBAR (always dark) ───────────────────────────────────────────── */
 [data-theme="light"] .sidebar         { background: #0f1828; border-right-color: rgba(255,255,255,0.07); }
 [data-theme="light"] .mobile-topbar   { background: var(--bg-base); border-bottom-color: var(--glass-border); }
-
