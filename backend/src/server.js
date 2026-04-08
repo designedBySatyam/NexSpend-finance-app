@@ -8,7 +8,7 @@ const { MongoClient } = require("mongodb");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-require("dotenv").config();
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 let cachedPdfJsLib = null;
 
