@@ -3,6 +3,7 @@
 
   var SESSION_KEY = "finance_tracker_session_v1";
   var DEFAULT_API_PATH = "/api";
+  var API_REQUEST_TIMEOUT_MS = 15000;
   var syncQueue = Promise.resolve();
   var PIN_MAX_ATTEMPTS = 5;
   var PIN_LOCKOUT_MS = 5 * 60 * 1000;
@@ -86,6 +87,9 @@
   function isNetworkError(error) {
     var message = String(error && error.message ? error.message : "").toLowerCase();
     return (
+      (error && error.name === "AbortError") ||
+      message.indexOf("timed out") !== -1 ||
+      message.indexOf("timeout") !== -1 ||
       message.indexOf("failed to fetch") !== -1 ||
       message.indexOf("networkerror") !== -1 ||
       message.indexOf("load failed") !== -1 ||
@@ -114,7 +118,19 @@
     for (var index = 0; index < candidates.length; index += 1) {
       var base = candidates[index];
       try {
-        var response = await fetch(base + requestPath, options || {});
+        var fetchOptions = Object.assign({}, options || {});
+        var timeoutId = null;
+        if (!fetchOptions.signal && typeof AbortController !== "undefined") {
+          var controller = new AbortController();
+          fetchOptions.signal = controller.signal;
+          timeoutId = setTimeout(function () {
+            controller.abort();
+          }, API_REQUEST_TIMEOUT_MS);
+        }
+        var response = await fetch(base + requestPath, fetchOptions);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
 
         if (response.status === 404 || response.status === 405) {
           continue;
@@ -138,6 +154,13 @@
           payload: payload
         };
       } catch (error) {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        if (error && error.name === "AbortError") {
+          lastNetworkError = new Error("Backend request timed out. Please try again.");
+          continue;
+        }
         if (isNetworkError(error)) {
           lastNetworkError = error;
           continue;
@@ -147,6 +170,10 @@
     }
 
     if (lastNetworkError) {
+      var timeoutMessage = String(lastNetworkError.message || "").toLowerCase();
+      if (timeoutMessage.indexOf("timed out") !== -1 || timeoutMessage.indexOf("timeout") !== -1) {
+        throw new Error("Request timed out. Please try again.");
+      }
       throw new Error("Cannot reach backend API. Start backend and retry.");
     }
 
