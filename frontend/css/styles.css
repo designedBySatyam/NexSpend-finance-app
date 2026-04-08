@@ -1320,6 +1320,55 @@ label,
 }
 .field-optional { font-weight: 400; text-transform: none; letter-spacing: 0; opacity: 0.7; }
 
+.password-toggle-wrap {
+  position: relative;
+}
+.password-toggle-wrap > input {
+  padding-right: 2.6rem;
+}
+.password-toggle-btn {
+  position: absolute;
+  top: 50%;
+  right: 0.42rem;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease), background-color var(--t-fast) var(--ease);
+}
+.password-toggle-btn:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.08);
+}
+[data-theme="light"] .password-toggle-btn:hover {
+  background: rgba(15,23,42,0.08);
+}
+.password-toggle-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.password-toggle-btn svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+}
+.password-toggle-btn .icon-hide {
+  display: none;
+}
+.password-toggle-btn.is-visible .icon-show {
+  display: none;
+}
+.password-toggle-btn.is-visible .icon-hide {
+  display: block;
+}
+
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 textarea,
 select {

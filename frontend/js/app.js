@@ -83,6 +83,7 @@
 
   function init() {
     cacheDom();
+    setupPasswordVisibilityToggles();
     bindStaticEvents();
     setDefaultDates();
     syncViewFromSession();
@@ -90,6 +91,90 @@
 
   function byId(id) {
     return document.getElementById(id);
+  }
+
+  function setupPasswordVisibilityToggles() {
+    var passwordInputs = Array.prototype.slice.call(
+      document.querySelectorAll('input[type="password"][data-password-toggle="true"]')
+    );
+    passwordInputs.forEach(function (input) {
+      attachPasswordVisibilityToggle(input);
+    });
+  }
+
+  function attachPasswordVisibilityToggle(input) {
+    if (!input || input.getAttribute("data-password-toggle-ready") === "true") {
+      return;
+    }
+
+    var parent = input.parentNode;
+    if (!parent) {
+      return;
+    }
+
+    var wrap = document.createElement("div");
+    wrap.className = "password-toggle-wrap";
+    parent.insertBefore(wrap, input);
+    wrap.appendChild(input);
+
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "password-toggle-btn";
+    button.setAttribute("aria-label", "Show password");
+    button.setAttribute("aria-pressed", "false");
+    button.setAttribute("title", "Show password");
+    button.innerHTML = [
+      "<svg class='icon-show' viewBox='0 0 24 24' fill='none' stroke-width='1.8'>",
+      "<path d='M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6-10-6-10-6z'></path>",
+      "<circle cx='12' cy='12' r='2.8'></circle>",
+      "</svg>",
+      "<svg class='icon-hide' viewBox='0 0 24 24' fill='none' stroke-width='1.8'>",
+      "<path d='M3 3l18 18'></path>",
+      "<path d='M9.6 5.3A11 11 0 0 1 12 5c6.2 0 10 7 10 7a19.5 19.5 0 0 1-3.4 4.3'></path>",
+      "<path d='M6.6 6.6C3.9 8.3 2 12 2 12s3.8 6 10 6c1.8 0 3.3-.5 4.6-1.2'></path>",
+      "</svg>"
+    ].join("");
+
+    wrap.appendChild(button);
+    setPasswordVisibilityState(input, button, false);
+
+    button.addEventListener("click", function () {
+      var nextVisible = input.type === "password";
+      setPasswordVisibilityState(input, button, nextVisible);
+      input.focus({ preventScroll: true });
+      try {
+        var length = String(input.value || "").length;
+        input.setSelectionRange(length, length);
+      } catch (_error) {
+        return;
+      }
+    });
+
+    input.setAttribute("data-password-toggle-ready", "true");
+  }
+
+  function setPasswordVisibilityState(input, button, isVisible) {
+    if (!input || !button) {
+      return;
+    }
+    input.type = isVisible ? "text" : "password";
+    button.classList.toggle("is-visible", isVisible);
+    button.setAttribute("aria-pressed", isVisible ? "true" : "false");
+    button.setAttribute("aria-label", isVisible ? "Hide password" : "Show password");
+    button.setAttribute("title", isVisible ? "Hide password" : "Show password");
+  }
+
+  function resetPasswordVisibility(scope) {
+    var root = scope || document;
+    var inputs = Array.prototype.slice.call(root.querySelectorAll('input[data-password-toggle="true"]'));
+    inputs.forEach(function (input) {
+      var button = input.parentElement ? input.parentElement.querySelector(".password-toggle-btn") : null;
+      if (button) {
+        setPasswordVisibilityState(input, button, false);
+        return;
+      }
+      input.type = "password";
+    });
   }
 
   function cacheDom() {
@@ -407,6 +492,7 @@
   }
 
   function switchAuthTab(tabName) {
+    resetPasswordVisibility(dom.authView);
     var showLogin = tabName === "login";
     dom.loginForm.classList.toggle("hidden", !showLogin);
     dom.signupForm.classList.toggle("hidden", showLogin);
@@ -423,6 +509,7 @@
         password: dom.loginPassword.value
       });
       dom.loginForm.reset();
+      resetPasswordVisibility(dom.loginForm);
       setAuthMessage("Login successful.", false);
       syncViewFromSession();
     } catch (error) {
@@ -439,6 +526,7 @@
         pin: dom.signupPin.value
       });
       dom.signupForm.reset();
+      resetPasswordVisibility(dom.signupForm);
       setAuthMessage("Account created. You are now logged in.", false);
       syncViewFromSession();
     } catch (error) {
@@ -1147,6 +1235,7 @@
     dom.settingsPanel.setAttribute("aria-hidden", "true");
     if (dom.changePasswordForm) {
       dom.changePasswordForm.reset();
+      resetPasswordVisibility(dom.changePasswordForm);
     }
     if (dom.changePinForm) {
       dom.changePinForm.reset();
@@ -1369,6 +1458,7 @@
         newPassword: newPassword
       });
       dom.changePasswordForm.reset();
+      resetPasswordVisibility(dom.changePasswordForm);
       setChangePasswordMessage("Password changed successfully.", false);
     } catch (error) {
       setChangePasswordMessage(error.message || "Could not change password.", true);
@@ -1652,6 +1742,7 @@
       return;
     }
     dom.forgotPasswordForm.reset();
+    resetPasswordVisibility(dom.forgotPasswordModal);
     setForgotPasswordMessage("", false);
     setForgotPasswordCodeHint("", false);
     var preferredEmail = String(
@@ -1684,6 +1775,7 @@
     if (dom.forgotPasswordForm) {
       dom.forgotPasswordForm.reset();
     }
+    resetPasswordVisibility(dom.forgotPasswordModal);
     setForgotPasswordMessage("", false);
     setForgotPasswordCodeHint("", false);
     syncBodyModalState();

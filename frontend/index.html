@@ -55,7 +55,7 @@
           </div>
           <div class="field">
             <label for="loginPassword">Password</label>
-            <input id="loginPassword" type="password" required minlength="6" placeholder="Min. 6 characters" autocomplete="current-password">
+            <input id="loginPassword" type="password" data-password-toggle="true" required minlength="6" placeholder="Min. 6 characters" autocomplete="current-password">
           </div>
           <div class="auth-aux-row">
             <button id="forgotPasswordBtn" class="auth-inline-link" type="button">Forgot password?</button>
@@ -74,7 +74,7 @@
           </div>
           <div class="field">
             <label for="signupPassword">Password</label>
-            <input id="signupPassword" type="password" required minlength="6" placeholder="Min. 6 characters" autocomplete="new-password">
+            <input id="signupPassword" type="password" data-password-toggle="true" required minlength="6" placeholder="Min. 6 characters" autocomplete="new-password">
           </div>
           <div class="field">
             <label for="signupPin">PIN Lock <span class="field-optional">(optional)</span></label>
@@ -337,15 +337,15 @@
               <form id="changePasswordForm" class="profile-form profile-password-form">
                 <div class="field">
                   <label for="currentPasswordInput">Current Password</label>
-                  <input id="currentPasswordInput" type="password" minlength="6" autocomplete="current-password" placeholder="Enter current password" required>
+                  <input id="currentPasswordInput" type="password" data-password-toggle="true" minlength="6" autocomplete="current-password" placeholder="Enter current password" required>
                 </div>
                 <div class="field">
                   <label for="newPasswordInput">New Password</label>
-                  <input id="newPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Min. 6 characters" required>
+                  <input id="newPasswordInput" type="password" data-password-toggle="true" minlength="6" autocomplete="new-password" placeholder="Min. 6 characters" required>
                 </div>
                 <div class="field">
                   <label for="confirmPasswordInput">Confirm New Password</label>
-                  <input id="confirmPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Re-enter new password" required>
+                  <input id="confirmPasswordInput" type="password" data-password-toggle="true" minlength="6" autocomplete="new-password" placeholder="Re-enter new password" required>
                 </div>
                 <section class="password-recovery-panel" aria-labelledby="passwordRecoveryTitle">
                   <p id="passwordRecoveryTitle" class="password-recovery-title">Forgot your current password?</p>
@@ -1070,11 +1070,11 @@
         </div>
         <div class="field">
           <label for="forgotPasswordNewPasswordInput">New Password</label>
-          <input id="forgotPasswordNewPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Min. 6 characters" required>
+          <input id="forgotPasswordNewPasswordInput" type="password" data-password-toggle="true" minlength="6" autocomplete="new-password" placeholder="Min. 6 characters" required>
         </div>
         <div class="field">
           <label for="forgotPasswordConfirmPasswordInput">Confirm New Password</label>
-          <input id="forgotPasswordConfirmPasswordInput" type="password" minlength="6" autocomplete="new-password" placeholder="Re-enter new password" required>
+          <input id="forgotPasswordConfirmPasswordInput" type="password" data-password-toggle="true" minlength="6" autocomplete="new-password" placeholder="Re-enter new password" required>
         </div>
         <p id="forgotPasswordMessage" class="status-text profile-form-message"></p>
         <div class="record-actions">
