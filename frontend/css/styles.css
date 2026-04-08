@@ -855,6 +855,35 @@ body.modal-open { overflow: hidden; }
 .profile-password-form {
   margin-top: 0.2rem;
 }
+.password-recovery-panel {
+  margin-top: 0.25rem;
+  border: 1px dashed var(--glass-border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+[data-theme="light"] .password-recovery-panel {
+  background: rgba(255,255,255,0.65);
+  border-color: rgba(14,23,42,0.18);
+}
+.password-recovery-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.password-recovery-copy {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.password-recovery-panel .btn {
+  min-width: 0;
+}
 .profile-section-divider {
   height: 1px;
   width: 100%;

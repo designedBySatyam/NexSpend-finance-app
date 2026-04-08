@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "mongodb": "^6.9.0",
     "multer": "^2.0.2",
+    "nodemailer": "^6.9.15",
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^5.6.205",
     "pdfkit": "^0.15.0"

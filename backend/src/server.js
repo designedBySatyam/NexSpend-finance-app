@@ -1,12 +1,14 @@
-﻿const express = require("express");
+const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
+const nodemailer = require("nodemailer");
 const PDFDocument = require("pdfkit");
 const pdfParse = require("pdf-parse");
 const { MongoClient } = require("mongodb");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+require("dotenv").config();
 
 let cachedPdfJsLib = null;
 
@@ -38,15 +40,39 @@ function normalizeMongoUri(value) {
   return uri;
 }
 
+function normalizeEnvText(value) {
+  let text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  if (
+    (text.startsWith('"') && text.endsWith('"')) ||
+    (text.startsWith("'") && text.endsWith("'"))
+  ) {
+    text = text.slice(1, -1).trim();
+  }
+  return text;
+}
+
 const MONGODB_URI = normalizeMongoUri(process.env.MONGODB_URI);
-const MONGODB_DB_NAME = String(process.env.MONGODB_DB_NAME || "nexspend").trim() || "nexspend";
+const MONGODB_DB_NAME = normalizeEnvText(process.env.MONGODB_DB_NAME) || "nexspend";
 const USE_MONGODB = Boolean(MONGODB_URI);
 const USERS_COLLECTION_NAME = "users";
 const SESSIONS_COLLECTION_NAME = "sessions";
-const RESET_CODE_TTL_MINUTES = Number(process.env.RESET_CODE_TTL_MINUTES || 15);
+const RESET_CODE_TTL_MINUTES = Math.max(1, Number(process.env.RESET_CODE_TTL_MINUTES || 15) || 15);
+const APP_DISPLAY_NAME = normalizeEnvText(process.env.APP_DISPLAY_NAME) || "NexSpend";
+const SMTP_HOST = normalizeEnvText(process.env.SMTP_HOST);
+const SMTP_PORT = Math.max(1, Number(process.env.SMTP_PORT || 587) || 587);
+const SMTP_SECURE =
+  normalizeEnvText(process.env.SMTP_SECURE).toLowerCase() === "true" ||
+  SMTP_PORT === 465;
+const SMTP_USER = normalizeEnvText(process.env.SMTP_USER);
+const SMTP_PASS = normalizeEnvText(process.env.SMTP_PASS);
+const SMTP_FROM = normalizeEnvText(process.env.SMTP_FROM || SMTP_USER);
 
 let mongoClient = null;
 let mongoDb = null;
+let passwordResetEmailTransporter = null;
 
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
@@ -196,6 +222,71 @@ function normalizeEmail(value) {
 
 function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isPasswordResetEmailConfigured() {
+  return Boolean(SMTP_HOST && SMTP_FROM);
+}
+
+function getPasswordResetEmailTransporter() {
+  if (passwordResetEmailTransporter) {
+    return passwordResetEmailTransporter;
+  }
+
+  const transporterOptions = {
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE
+  };
+
+  if (SMTP_USER || SMTP_PASS) {
+    transporterOptions.auth = {
+      user: SMTP_USER,
+      pass: SMTP_PASS
+    };
+  }
+
+  passwordResetEmailTransporter = nodemailer.createTransport(transporterOptions);
+  return passwordResetEmailTransporter;
+}
+
+function formatResetCodeExpiryLabel(expiresAt) {
+  const parsed = new Date(String(expiresAt || ""));
+  if (Number.isNaN(parsed.getTime())) {
+    return RESET_CODE_TTL_MINUTES + " minutes";
+  }
+  return parsed.toUTCString();
+}
+
+function maskEmailForLog(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  const atIndex = normalized.indexOf("@");
+  if (atIndex <= 1) {
+    return normalized || "unknown";
+  }
+  return normalized.slice(0, 1) + "***" + normalized.slice(atIndex);
+}
+
+async function sendPasswordResetCodeEmail(email, resetCode, expiresAt) {
+  const transporter = getPasswordResetEmailTransporter();
+  const subject = APP_DISPLAY_NAME + " password reset code";
+  const expiryLabel = formatResetCodeExpiryLabel(expiresAt);
+
+  const text = [
+    "We received a request to reset your " + APP_DISPLAY_NAME + " password.",
+    "",
+    "Reset code: " + resetCode,
+    "This code expires at " + expiryLabel + ".",
+    "",
+    "If you did not request this, you can ignore this email."
+  ].join("\n");
+
+  await transporter.sendMail({
+    from: SMTP_FROM,
+    to: email,
+    subject: subject,
+    text: text
+  });
 }
 
 function createDefaultUserData(email) {
@@ -1308,13 +1399,25 @@ app.post("/api/auth/forgot-password/request", async function (req, res, next) {
       return;
     }
 
-    const genericMessage = "If an account exists for this email, a reset code has been generated.";
+    if (!isPasswordResetEmailConfigured()) {
+      res.status(503).json({
+        message: "Password reset email service is unavailable. Please contact support or try again later."
+      });
+      return;
+    }
+
+    const genericMessage = "If an account exists for this email, a reset code has been sent.";
+    const fallbackExpiresAt = createResetCodeExpiryIso();
 
     if (USE_MONGODB) {
       const usersCollection = getMongoCollection(USERS_COLLECTION_NAME);
       const user = await usersCollection.findOne({ email: email });
       if (!user) {
-        res.json({ ok: true, message: genericMessage });
+        res.json({
+          ok: true,
+          message: genericMessage,
+          expiresAt: fallbackExpiresAt
+        });
         return;
       }
 
@@ -1331,10 +1434,21 @@ app.post("/api/auth/forgot-password/request", async function (req, res, next) {
         }
       );
 
+      try {
+        await sendPasswordResetCodeEmail(email, resetCode, expiresAt);
+      } catch (mailError) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "Password reset email delivery failed for",
+          maskEmailForLog(email),
+          "-",
+          mailError && mailError.message ? mailError.message : mailError
+        );
+      }
+
       res.json({
         ok: true,
-        message: "Reset code generated. Use this code to set a new password.",
-        resetCode: resetCode,
+        message: genericMessage,
         expiresAt: expiresAt
       });
       return;
@@ -1362,14 +1476,29 @@ app.post("/api/auth/forgot-password/request", async function (req, res, next) {
     });
 
     if (!result.user) {
-      res.json({ ok: true, message: genericMessage });
+      res.json({
+        ok: true,
+        message: genericMessage,
+        expiresAt: fallbackExpiresAt
+      });
       return;
+    }
+
+    try {
+      await sendPasswordResetCodeEmail(email, result.resetCode, result.expiresAt);
+    } catch (mailError) {
+      // eslint-disable-next-line no-console
+      console.error(
+        "Password reset email delivery failed for",
+        maskEmailForLog(email),
+        "-",
+        mailError && mailError.message ? mailError.message : mailError
+      );
     }
 
     res.json({
       ok: true,
-      message: "Reset code generated. Use this code to set a new password.",
-      resetCode: result.resetCode,
+      message: genericMessage,
       expiresAt: result.expiresAt
     });
   } catch (error) {
@@ -1854,6 +1983,12 @@ async function startServer() {
         storageMode === "mongo"
           ? "Storage: MongoDB (" + MONGODB_DB_NAME + ")"
           : "Storage: Local file (" + DB_PATH + ")"
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        isPasswordResetEmailConfigured()
+          ? "Password reset email: Enabled (" + SMTP_HOST + ":" + SMTP_PORT + ")"
+          : "Password reset email: Disabled (set SMTP_HOST/SMTP_FROM and related SMTP vars)"
       );
     });
   } catch (error) {

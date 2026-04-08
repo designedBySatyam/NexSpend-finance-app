@@ -226,6 +226,7 @@
     dom.currentPasswordInput = byId("currentPasswordInput");
     dom.newPasswordInput = byId("newPasswordInput");
     dom.confirmPasswordInput = byId("confirmPasswordInput");
+    dom.settingsForgotPasswordBtn = byId("settingsForgotPasswordBtn");
     dom.changePasswordMessage = byId("changePasswordMessage");
     dom.changePinForm = byId("changePinForm");
     dom.newPinInput = byId("newPinInput");
@@ -341,6 +342,9 @@
     }
     if (dom.changePasswordForm) {
       dom.changePasswordForm.addEventListener("submit", handleChangePasswordFormSubmit);
+    }
+    if (dom.settingsForgotPasswordBtn) {
+      dom.settingsForgotPasswordBtn.addEventListener("click", openForgotPasswordModal);
     }
     if (dom.changePinForm) {
       dom.changePinForm.addEventListener("submit", handleChangePinFormSubmit);
@@ -1650,9 +1654,14 @@
     dom.forgotPasswordForm.reset();
     setForgotPasswordMessage("", false);
     setForgotPasswordCodeHint("", false);
-    var loginEmail = String((dom.loginEmail && dom.loginEmail.value) || "").trim().toLowerCase();
-    if (loginEmail) {
-      dom.forgotPasswordEmailInput.value = loginEmail;
+    var preferredEmail = String(
+      (state.user && state.user.email) ||
+      (dom.profileEmailInput && dom.profileEmailInput.value) ||
+      (dom.loginEmail && dom.loginEmail.value) ||
+      ""
+    ).trim().toLowerCase();
+    if (preferredEmail) {
+      dom.forgotPasswordEmailInput.value = preferredEmail;
     }
 
     dom.forgotPasswordModal.classList.remove("hidden");
@@ -1704,15 +1713,12 @@
     try {
       setForgotPasswordMessage("Requesting reset code...", false);
       var result = await window.AuthService.requestPasswordReset(email);
-      var hint = result && result.message ? result.message : "If account exists, a reset code has been generated.";
-      if (result && result.resetCode) {
-        hint += " Code: " + result.resetCode;
-      }
+      var hint = result && result.message ? result.message : "If account exists, a reset code has been sent to your email.";
       if (result && result.expiresAt) {
         hint += " (expires " + formatDateTime(result.expiresAt) + ")";
       }
       setForgotPasswordCodeHint(hint, false);
-      setForgotPasswordMessage("Reset code ready. Enter code and new password.", false);
+      setForgotPasswordMessage("Check your email inbox for the reset code, then enter it below.", false);
       if (dom.forgotPasswordCodeInput) {
         dom.forgotPasswordCodeInput.focus();
       }
@@ -1752,6 +1758,10 @@
         newPassword: newPassword
       });
       closeForgotPasswordModal();
+      clearAutoLockInactivityTimer();
+      window.AuthService.logout();
+      state.user = null;
+      syncViewFromSession();
       switchAuthTab("login");
       if (dom.loginEmail) {
         dom.loginEmail.value = email;
