@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 const PDFDocument = require("pdfkit");
 const pdfParse = require("pdf-parse");
 const { MongoClient } = require("mongodb");
@@ -61,34 +61,17 @@ const USERS_COLLECTION_NAME = "users";
 const SESSIONS_COLLECTION_NAME = "sessions";
 const RESET_CODE_TTL_MINUTES = Math.max(1, Number(process.env.RESET_CODE_TTL_MINUTES || 15) || 15);
 const APP_DISPLAY_NAME = normalizeEnvText(process.env.APP_DISPLAY_NAME) || "NexSpend";
-const SMTP_HOST = normalizeEnvText(process.env.SMTP_HOST);
-const SMTP_PORT = Math.max(1, Number(process.env.SMTP_PORT || 587) || 587);
-const SMTP_SECURE =
-  normalizeEnvText(process.env.SMTP_SECURE).toLowerCase() === "true" ||
-  SMTP_PORT === 465;
-const SMTP_USER = normalizeEnvText(process.env.SMTP_USER);
-const SMTP_PASS = normalizeEnvText(process.env.SMTP_PASS);
-const SMTP_FROM = normalizeEnvText(process.env.SMTP_FROM || SMTP_USER);
-const SMTP_CONNECTION_TIMEOUT_MS = Math.max(
+const RESEND_API_KEY = normalizeEnvText(process.env.RESEND_API_KEY);
+const RESEND_FROM = normalizeEnvText(process.env.RESEND_FROM);
+const RESEND_REPLY_TO = normalizeEnvText(process.env.RESEND_REPLY_TO);
+const EMAIL_SEND_TIMEOUT_MS = Math.max(
   1000,
-  Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000) || 10000
-);
-const SMTP_GREETING_TIMEOUT_MS = Math.max(
-  1000,
-  Number(process.env.SMTP_GREETING_TIMEOUT_MS || 10000) || 10000
-);
-const SMTP_SOCKET_TIMEOUT_MS = Math.max(
-  1000,
-  Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 15000) || 15000
-);
-const SMTP_SEND_TIMEOUT_MS = Math.max(
-  1000,
-  Number(process.env.SMTP_SEND_TIMEOUT_MS || 15000) || 15000
+  Number(process.env.EMAIL_SEND_TIMEOUT_MS || 15000) || 15000
 );
 
 let mongoClient = null;
 let mongoDb = null;
-let passwordResetEmailTransporter = null;
+let resendClient = null;
 
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
@@ -241,32 +224,16 @@ function isValidEmail(value) {
 }
 
 function isPasswordResetEmailConfigured() {
-  return Boolean(SMTP_HOST && SMTP_FROM);
+  return Boolean(RESEND_API_KEY && RESEND_FROM);
 }
 
-function getPasswordResetEmailTransporter() {
-  if (passwordResetEmailTransporter) {
-    return passwordResetEmailTransporter;
+function getResendClient() {
+  if (resendClient) {
+    return resendClient;
   }
 
-  const transporterOptions = {
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_SECURE,
-    connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
-    greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
-    socketTimeout: SMTP_SOCKET_TIMEOUT_MS
-  };
-
-  if (SMTP_USER || SMTP_PASS) {
-    transporterOptions.auth = {
-      user: SMTP_USER,
-      pass: SMTP_PASS
-    };
-  }
-
-  passwordResetEmailTransporter = nodemailer.createTransport(transporterOptions);
-  return passwordResetEmailTransporter;
+  resendClient = new Resend(RESEND_API_KEY);
+  return resendClient;
 }
 
 function formatResetCodeExpiryLabel(expiresAt) {
@@ -287,7 +254,7 @@ function maskEmailForLog(email) {
 }
 
 async function sendPasswordResetCodeEmail(email, resetCode, expiresAt) {
-  const transporter = getPasswordResetEmailTransporter();
+  const client = getResendClient();
   const subject = APP_DISPLAY_NAME + " password reset code";
   const expiryLabel = formatResetCodeExpiryLabel(expiresAt);
 
@@ -300,19 +267,30 @@ async function sendPasswordResetCodeEmail(email, resetCode, expiresAt) {
     "If you did not request this, you can ignore this email."
   ].join("\n");
 
-  await Promise.race([
-    transporter.sendMail({
-      from: SMTP_FROM,
-      to: email,
-      subject: subject,
-      text: text
-    }),
+  const emailPayload = {
+    from: RESEND_FROM,
+    to: [email],
+    subject: subject,
+    text: text
+  };
+  if (RESEND_REPLY_TO) {
+    emailPayload.reply_to = RESEND_REPLY_TO;
+  }
+
+  const result = await Promise.race([
+    client.emails.send(emailPayload),
     new Promise(function (_resolve, reject) {
       setTimeout(function () {
-        reject(new Error("SMTP send timeout after " + SMTP_SEND_TIMEOUT_MS + "ms."));
-      }, SMTP_SEND_TIMEOUT_MS);
+        reject(new Error("Resend API timeout after " + EMAIL_SEND_TIMEOUT_MS + "ms."));
+      }, EMAIL_SEND_TIMEOUT_MS);
     })
   ]);
+
+  if (result && result.error) {
+    throw new Error(
+      result.error.message || result.error.name || "Resend could not send password reset email."
+    );
+  }
 }
 
 function createDefaultUserData(email) {
@@ -2013,8 +1991,8 @@ async function startServer() {
       // eslint-disable-next-line no-console
       console.log(
         isPasswordResetEmailConfigured()
-          ? "Password reset email: Enabled (" + SMTP_HOST + ":" + SMTP_PORT + ")"
-          : "Password reset email: Disabled (set SMTP_HOST/SMTP_FROM and related SMTP vars)"
+          ? "Password reset email: Enabled (Resend API)"
+          : "Password reset email: Disabled (set RESEND_API_KEY/RESEND_FROM)"
       );
     });
   } catch (error) {

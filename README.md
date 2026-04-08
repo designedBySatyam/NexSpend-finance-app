@@ -19,15 +19,13 @@ Now includes:
    - Optional (MongoDB): set env vars before start
      - `MONGODB_URI=<your mongodb connection string>`
      - `MONGODB_DB_NAME=nexspend` (optional, default is `nexspend`)
-   - Optional (Forgot password email delivery): set SMTP env vars before start
-     - `SMTP_HOST=<smtp host>`
-     - `SMTP_PORT=587` (or `465`)
-     - `SMTP_SECURE=false` (set `true` for SSL/465)
-     - `SMTP_USER=<smtp username>` (optional if provider allows no-auth relay)
-     - `SMTP_PASS=<smtp password>` (optional if provider allows no-auth relay)
-     - `SMTP_FROM="NexSpend <no-reply@yourdomain.com>"`
+   - Optional (Forgot password email delivery): set Resend env vars before start
+     - `RESEND_API_KEY=<your resend api key>`
+     - `RESEND_FROM="NexSpend <onboarding@resend.dev>"` (or your verified sender)
+     - `RESEND_REPLY_TO=<support@yourdomain.com>` (optional)
      - `APP_DISPLAY_NAME=NexSpend` (optional)
      - `RESET_CODE_TTL_MINUTES=15` (optional)
+     - `EMAIL_SEND_TIMEOUT_MS=15000` (optional)
    - `npm start` (runs on `http://localhost:4000`)
 3. Open:
    - `http://localhost:4000`
@@ -65,8 +63,10 @@ Manual Render Web Service settings (if not using blueprint):
 - Environment Variables:
   - `MONGODB_URI` = your MongoDB connection string
   - `MONGODB_DB_NAME` = `nexspend` (optional)
-  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+  - `RESEND_API_KEY`, `RESEND_FROM`
+  - `RESEND_REPLY_TO` (optional)
   - `APP_DISPLAY_NAME` (optional), `RESET_CODE_TTL_MINUTES` (optional)
+  - `EMAIL_SEND_TIMEOUT_MS` (optional)
   - Important: set only URI as value, for example `mongodb+srv://...`
     - Do not include `MONGODB_URI=` in value
     - Do not wrap value in quotes
@@ -160,9 +160,11 @@ Protected export notes:
   - `npm run decrypt:csv -- <input.csv.enc> <output.csv> <password>`
 
 Password reset note:
-- Forgot password uses a backend-generated reset code and delivers it by email (SMTP).
+- Forgot password uses a backend-generated reset code and delivers it by email (Resend API).
 - Reset codes are stored as hashes server-side and are not returned in API responses.
-- Configure SMTP env vars for this flow to work in your environment.
+- Configure Resend env vars for this flow to work in your environment.
+- With `onboarding@resend.dev`, Resend only sends to your own account email for testing.
+- To send to any user email, verify your own domain in Resend and use that sender in `RESEND_FROM`.
 
 ## Data Storage
 
